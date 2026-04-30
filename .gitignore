@@ -1,0 +1,10 @@
+node_modules/
+.expo/
+dist/
+build/
+.env
+.env.local
+.env.production
+*.log
+.DS_Store
+Thumbs.db
