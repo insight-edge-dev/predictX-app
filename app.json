@@ -1,30 +1,30 @@
 {
   "expo": {
-    "name": "CricketIQ",
-    "slug": "ipl-iq",
+    "name": "PredictX",
+    "slug": "predictx",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
-    "scheme": "ipliq",
+    "scheme": "predictx",
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#020617"
+      "backgroundColor": "#0A0A0F"
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.insideedge.ipliq"
+      "bundleIdentifier": "com.insideedge.predictx"
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#020617",
+        "backgroundColor": "#0A0A0F",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "package": "com.insideedge.ipliq",
-      "usesCleartextTraffic": true
+      "package": "com.insideedge.predictx",
+      "versionCode": 1
     },
     "web": {
       "favicon": "./assets/favicon.png",
@@ -32,7 +32,8 @@
     },
     "plugins": [
       "expo-router",
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-image"
     ],
     "extra": {
       "router": {},

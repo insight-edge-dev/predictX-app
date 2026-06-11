@@ -1,16 +1,12 @@
 /**
- * MatchCard.tsx — production match card for the IPL IQ app.
+ * MatchCard.tsx — PredictX match card components.
  *
- * Accepts AdaptedMatch (from matchAdapter.ts) — all fields null-safe.
- *
- * Status color system:
- *   LIVE      → #FF4545  (red)
- *   UPCOMING  → #4F8CFF  (blue / accent)
- *   COMPLETED → #8899AA  (muted gray)
+ * Design: Cricbuzz-style compact cards. White card, horizontal team rows,
+ * minimal decoration, information-dense layout.
  *
  * Exported components:
- *   MatchCard         — standard vertical card
- *   FeaturedMatchCard — larger hero card (for top of list)
+ *   MatchCard         — compact horizontal card (primary)
+ *   FeaturedMatchCard — slightly larger hero card for home screen
  */
 
 import {
@@ -20,63 +16,44 @@ import {
   Image,
   Animated,
 } from 'react-native';
-import { memo, useRef } from 'react';
+import { memo, useRef, useEffect } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { LinearGradient } from 'expo-linear-gradient';
+import { useRouter } from 'expo-router';
 import type { AdaptedMatch } from '@/utils/matchAdapter';
 import { getTeamLogo, getTeamColor } from '@/theme/colors';
 import { formatMatchDate, getMatchCountdown } from '@/utils/date';
 import { colors, spacing, font, radius } from '@/constants/theme';
+import { useLeague } from '@/contexts/LeagueContext';
 
-// ── Status config ─────────────────────────────────────────────
+// ── Pulsing live dot ──────────────────────────────────────────
 
-function getStatusConfig(status: AdaptedMatch['status']) {
-  switch (status) {
-    case 'live':
-      return {
-        color:   colors.live,
-        bg:      colors.live     + '20',
-        border:  colors.live     + '50',
-        label:   '● LIVE',
-      };
-    case 'upcoming':
-      return {
-        color:   colors.accent,
-        bg:      colors.accent   + '18',
-        border:  colors.accent   + '40',
-        label:   'UPCOMING',
-      };
-    case 'completed':
-    default:
-      return {
-        color:   colors.textSecondary,
-        bg:      colors.textSecondary + '18',
-        border:  colors.textSecondary + '30',
-        label:   'COMPLETED',
-      };
-  }
+function LiveDot({ size = 6 }: { size?: number }) {
+  const opacity = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(opacity, { toValue: 0.25, duration: 600, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 1,    duration: 600, useNativeDriver: true }),
+      ])
+    ).start();
+  }, []);
+
+  return (
+    <Animated.View
+      style={{
+        width: size, height: size, borderRadius: size / 2,
+        backgroundColor: colors.live,
+        opacity,
+      }}
+    />
+  );
 }
 
-// ── Stage badge config ────────────────────────────────────────
+// ── Team logo (small, inline) ──────────────────────────────────
 
-const STAGE_COLORS: Record<string, string> = {
-  QUALIFIER:  '#A78BFA',
-  ELIMINATOR: '#FB923C',
-  FINAL:      colors.accent,
-};
-
-// ── TeamLogo ──────────────────────────────────────────────────
-
-function TeamLogo({
-  logo,
-  shortName,
-  size,
-}: {
-  logo:      string;
-  shortName: string;
-  size:      number;
-}) {
+function TeamLogo({ logo, shortName, size }: { logo: string; shortName: string; size: number }) {
   const url   = getTeamLogo(logo, shortName);
   const color = getTeamColor(shortName);
 
@@ -92,408 +69,309 @@ function TeamLogo({
   return (
     <View
       style={{
-        width:           size,
-        height:          size,
-        borderRadius:    size / 2,
-        backgroundColor: color + '20',
-        alignItems:      'center',
-        justifyContent:  'center',
+        width: size, height: size, borderRadius: size / 2,
+        backgroundColor: color + '18',
+        alignItems: 'center', justifyContent: 'center',
       }}
     >
-      <Text style={{ color, fontSize: size * 0.3, fontWeight: '700' }}>
-        {shortName || '?'}
+      <Text style={{ color, fontSize: size * 0.32, fontWeight: '700' }}>
+        {(shortName || '?').slice(0, 2)}
       </Text>
     </View>
   );
 }
 
-// ── StatusBadge ───────────────────────────────────────────────
+// ── Horizontal team row (Cricbuzz-style) ──────────────────────
 
-function StatusBadge({ status }: { status: AdaptedMatch['status'] }) {
-  const cfg = getStatusConfig(status);
-  return (
-    <View
-      style={{
-        backgroundColor: cfg.bg,
-        borderRadius:    8,
-        paddingHorizontal: spacing.sm,
-        paddingVertical:   3,
-        borderWidth:     1,
-        borderColor:     cfg.border,
-      }}
-    >
-      <Text
-        style={{
-          color:       cfg.color,
-          fontSize:    font.xs,
-          fontWeight:  '700',
-          letterSpacing: 0.6,
-        }}
-      >
-        {cfg.label}
-      </Text>
-    </View>
-  );
-}
-
-// ── StageBadge ────────────────────────────────────────────────
-
-function StageBadge({ stage }: { stage: string }) {
-  const color = STAGE_COLORS[stage];
-  if (!color) return null;
-  return (
-    <View
-      style={{
-        backgroundColor: color + '20',
-        borderRadius:    6,
-        paddingHorizontal: spacing.sm,
-        paddingVertical:   2,
-        borderWidth:     1,
-        borderColor:     color + '50',
-        alignSelf:       'flex-start',
-        marginBottom:    spacing.xs,
-      }}
-    >
-      <Text style={{ color, fontSize: 9, fontWeight: '800', letterSpacing: 1 }}>
-        ★ {stage}
-      </Text>
-    </View>
-  );
-}
-
-// ── TeamColumn ────────────────────────────────────────────────
-
-function TeamColumn({
-  logo,
-  shortName,
-  score,
-  overs,
-  isWinner,
-  align,
+function HorizontalTeamRow({
+  logo, shortName, score, overs, isWinner, isUpcoming,
 }: {
-  logo:      string;
-  shortName: string;
-  score:     string;
-  overs:     string;
-  isWinner:  boolean;
-  align:     'left' | 'right';
+  logo: string; shortName: string; score: string;
+  overs: string; isWinner: boolean; isUpcoming: boolean;
 }) {
-  const color = getTeamColor(shortName);
   return (
-    <View style={{ flex: 1, alignItems: 'center' }}>
-      {/* Winner highlight ring */}
-      <View
-        style={{
-          padding:        isWinner ? 3 : 0,
-          borderRadius:   36,
-          borderWidth:    isWinner ? 2 : 0,
-          borderColor:    isWinner ? color + '80' : 'transparent',
-        }}
-      >
-        <TeamLogo logo={logo} shortName={shortName} size={52} />
-      </View>
+    <View style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 9 }}>
+      <TeamLogo logo={logo} shortName={shortName} size={28} />
 
       <Text
         style={{
-          color:       isWinner ? '#FFFFFF' : colors.textSecondary,
-          fontSize:    font.base,
-          fontWeight:  isWinner ? '800' : '600',
-          marginTop:   spacing.sm,
-          textAlign:   'center',
+          flex: 1,
+          marginLeft: 10,
+          color:      isWinner ? colors.textPrimary : colors.textSecondary,
+          fontSize:   font.base,
+          fontWeight: isWinner ? '700' : '500',
         }}
+        numberOfLines={1}
       >
         {shortName}
       </Text>
 
-      {score ? (
-        <Text
-          style={{
-            color:      isWinner ? '#FFFFFF' : colors.textSecondary,
-            fontSize:   font.md,
-            fontWeight: isWinner ? '700' : '500',
-            marginTop:  2,
-          }}
-        >
-          {score}
-        </Text>
+      {!isUpcoming && score ? (
+        <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 3 }}>
+          <Text
+            style={{
+              color:      isWinner ? colors.textPrimary : colors.textSecondary,
+              fontSize:   font.base,
+              fontWeight: isWinner ? '700' : '400',
+            }}
+          >
+            {score}
+          </Text>
+          {overs ? (
+            <Text style={{ color: colors.textMuted, fontSize: font.xs }}>
+              ({overs})
+            </Text>
+          ) : null}
+        </View>
       ) : null}
 
-      {overs ? (
-        <Text style={{ color: colors.textMuted, fontSize: font.xs, marginTop: 1 }}>
-          ({overs} ov)
-        </Text>
+      {!isUpcoming && !score ? (
+        <Text style={{ color: colors.textMuted, fontSize: font.sm }}>Yet to bat</Text>
       ) : null}
     </View>
   );
 }
 
-// ── MatchCard ─────────────────────────────────────────────────
+// ── Prediction result badge ────────────────────────────────────
+
+export function PredictionBadge({ label, result }: { label: string; result: 'correct' | 'wrong' }) {
+  const ok     = result === 'correct';
+  const color  = ok ? colors.success : colors.danger;
+  const bg     = ok ? colors.successDim : colors.dangerDim;
+  const icon   = ok ? 'checkmark-circle-outline' : 'close-circle-outline';
+  const suffix = ok ? 'Correct' : 'Wrong';
+
+  return (
+    <View
+      style={{
+        flexDirection: 'row', alignItems: 'center', gap: 4,
+        backgroundColor: bg, borderRadius: 20,
+        paddingHorizontal: 10, paddingVertical: 4,
+        borderWidth: 1, borderColor: color + '30',
+      }}
+    >
+      <Ionicons name={icon} size={12} color={color} />
+      <Text style={{ color, fontSize: font.xs, fontWeight: '700' }}>
+        {label} · {suffix}
+      </Text>
+    </View>
+  );
+}
+
+// ── Press animation hook ───────────────────────────────────────
+
+function usePressScale() {
+  const scale = useRef(new Animated.Value(1)).current;
+
+  const onPressIn = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    Animated.spring(scale, {
+      toValue: 0.984, useNativeDriver: true, speed: 50, bounciness: 3,
+    }).start();
+  };
+
+  const onPressOut = () => {
+    Animated.spring(scale, {
+      toValue: 1, useNativeDriver: true, speed: 50, bounciness: 3,
+    }).start();
+  };
+
+  return { scale, onPressIn, onPressOut };
+}
+
+// ── MatchCard (primary compact card) ─────────────────────────
 
 export const MatchCard = memo(function MatchCard({
   match,
   onPress,
+  predictionResult,
+  expertPredictionResult,
 }: {
-  match:   AdaptedMatch;
-  onPress?: (id: string) => void;
+  match:                   AdaptedMatch;
+  onPress?:                (id: string) => void;
+  predictionResult?:       'correct' | 'wrong' | null;
+  expertPredictionResult?: 'correct' | 'wrong' | null;
 }) {
-  const scaleAnim   = useRef(new Animated.Value(1)).current;
-  const team1Color  = getTeamColor(match.team1Short);
-  const team2Color  = getTeamColor(match.team2Short);
-  const statusCfg   = getStatusConfig(match.status);
-  const countdown   = match.isUpcoming ? getMatchCountdown(match.date) : '';
+  const { scale, onPressIn, onPressOut } = usePressScale();
+  const router = useRouter();
+  const { league } = useLeague();
 
-  // Determine winner for highlight
   const statusLower = match.statusText.toLowerCase();
-  const team1Wins   =
-    match.isCompleted &&
-    statusLower.includes(match.team1Short.toLowerCase()) &&
-    statusLower.includes('won');
-  const team2Wins   =
-    match.isCompleted &&
-    statusLower.includes(match.team2Short.toLowerCase()) &&
-    statusLower.includes('won');
+  const team1Wins   = match.isCompleted && (
+    match.winner
+      ? match.winner === match.team1Name
+      : statusLower.includes(match.team1Short.toLowerCase()) && statusLower.includes('won')
+  );
+  const team2Wins   = match.isCompleted && (
+    match.winner
+      ? match.winner === match.team2Name
+      : statusLower.includes(match.team2Short.toLowerCase()) && statusLower.includes('won')
+  );
 
-  const handlePressIn = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    Animated.spring(scaleAnim, {
-      toValue:         0.97,
-      useNativeDriver: true,
-      speed:           50,
-      bounciness:      4,
-    }).start();
-  };
-
-  const handlePressOut = () => {
-    Animated.spring(scaleAnim, {
-      toValue:         1,
-      useNativeDriver: true,
-      speed:           50,
-      bounciness:      4,
-    }).start();
-  };
+  const stageLabel = match.matchStage !== 'LEAGUE' ? ` · ${match.matchStage}` : '';
+  const headerLabel = `${league.short} · ${(match.matchType || 'T20').toUpperCase()}${stageLabel}`;
+  const resultText  = match.result ?? (match.isLive ? match.statusText : null);
+  const countdown   = match.isUpcoming ? getMatchCountdown(match.date) : '';
 
   return (
     <Pressable
       onPress={() => onPress?.(match.id)}
-      onPressIn={handlePressIn}
-      onPressOut={handlePressOut}
+      onPressIn={onPressIn}
+      onPressOut={onPressOut}
     >
       <Animated.View
         style={{
-          transform:     [{ scale: scaleAnim }],
-          marginBottom:  spacing.md,
-          shadowColor:   match.isLive ? colors.live : team1Color,
-          shadowOffset:  { width: 0, height: 4 },
-          shadowOpacity: match.isLive ? 0.25 : 0.12,
-          shadowRadius:  12,
-          elevation:     6,
+          transform:    [{ scale }],
+          marginBottom: spacing.sm,
+          shadowColor:  '#000',
+          shadowOffset: { width: 0, height: 1 },
+          shadowOpacity: 0.05,
+          shadowRadius:  3,
+          elevation:    1,
         }}
       >
-        {/* Stage badge above card */}
-        {match.matchStage !== 'LEAGUE' && (
-          <StageBadge stage={match.matchStage} />
-        )}
-
-        {/* Dual-color top bar */}
         <View
           style={{
-            flexDirection:       'row',
-            borderTopLeftRadius:  radius.md,
-            borderTopRightRadius: radius.md,
-            overflow:             'hidden',
+            backgroundColor: colors.card,
+            borderRadius:    radius.md,
+            borderWidth:     1,
+            borderColor:     match.isLive ? '#FECACA' : colors.border,
+            overflow:        'hidden',
           }}
         >
-          <View style={{ flex: 1, height: 3, backgroundColor: team1Color }} />
-          <View style={{ flex: 1, height: 3, backgroundColor: team2Color }} />
-        </View>
+          {/* Live accent bar at top */}
+          {match.isLive && (
+            <View style={{ height: 2, backgroundColor: colors.live }} />
+          )}
 
-        <LinearGradient
-          colors={['#0D1421', '#0A1118', '#0D1421']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={{
-            borderBottomLeftRadius:  radius.md,
-            borderBottomRightRadius: radius.md,
-            padding:    spacing.lg,
-            borderWidth: 1,
-            borderTopWidth: 0,
-            borderColor: match.isLive
-              ? colors.live + '30'
-              : colors.border,
-          }}
-        >
-          {/* Top row: series info + status badge */}
+          {/* ── Header row ─────────────────────────────────── */}
           <View
             style={{
               flexDirection:  'row',
               alignItems:     'center',
-              justifyContent: 'space-between',
-              marginBottom:   spacing.lg,
+              paddingHorizontal: spacing.lg,
+              paddingTop:     spacing.md,
+              paddingBottom:  spacing.sm,
             }}
           >
-            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: spacing.sm }}>
-              <View
-                style={{
-                  backgroundColor: colors.accentDim,
-                  borderRadius:    6,
-                  paddingHorizontal: spacing.sm,
-                  paddingVertical:   3,
-                  marginRight:     spacing.sm,
-                }}
-              >
-                <Text
-                  style={{
-                    color:        colors.accent,
-                    fontSize:     font.xs,
-                    fontWeight:   '700',
-                    letterSpacing: 0.8,
-                  }}
-                >
-                  IPL • T20
-                </Text>
-              </View>
-              <Text
-                style={{
-                  color:    colors.textSecondary,
-                  fontSize: font.xs,
-                }}
-                numberOfLines={1}
-              >
-                {formatMatchDate(match.date)}
-              </Text>
-            </View>
-            <StatusBadge status={match.status} />
-          </View>
-
-          {/* Teams */}
-          <View
-            style={{ flexDirection: 'row', alignItems: 'center' }}
-          >
-            <TeamColumn
-              logo={match.team1Logo}
-              shortName={match.team1Short}
-              score={match.score1}
-              overs={match.overs1}
-              isWinner={team1Wins}
-              align="left"
-            />
-
-            {/* Center separator */}
-            <View style={{ alignItems: 'center', paddingHorizontal: spacing.md, minWidth: 56 }}>
-              {match.isUpcoming ? (
-                <View style={{ alignItems: 'center' }}>
-                  <Text
-                    style={{
-                      color:      statusCfg.color,
-                      fontSize:   font.lg,
-                      fontWeight: '800',
-                    }}
-                  >
-                    {match.time}
-                  </Text>
-                  {countdown ? (
-                    <View
-                      style={{
-                        flexDirection:  'row',
-                        alignItems:     'center',
-                        marginTop:      spacing.xs,
-                      }}
-                    >
-                      <Ionicons
-                        name="time-outline"
-                        size={10}
-                        color={colors.textMuted}
-                      />
-                      <Text
-                        style={{
-                          color:      colors.textMuted,
-                          fontSize:   font.xs,
-                          fontWeight: '600',
-                          marginLeft: 3,
-                        }}
-                      >
-                        {countdown}
-                      </Text>
-                    </View>
-                  ) : null}
-                </View>
-              ) : (
-                <Text
-                  style={{
-                    color:      colors.textMuted + '80',
-                    fontSize:   font.lg,
-                    fontWeight: '800',
-                  }}
-                >
-                  VS
-                </Text>
-              )}
-            </View>
-
-            <TeamColumn
-              logo={match.team2Logo}
-              shortName={match.team2Short}
-              score={match.score2}
-              overs={match.overs2}
-              isWinner={team2Wins}
-              align="right"
-            />
-          </View>
-
-          {/* Result / live status line */}
-          {(match.result || (match.isLive && match.statusText)) ? (
-            <View
-              style={{
-                marginTop:       spacing.md,
-                paddingTop:      spacing.md,
-                borderTopWidth:  1,
-                borderTopColor:  colors.border,
-                alignItems:      'center',
-              }}
-            >
-              <Text
-                style={{
-                  color:      match.isLive ? colors.live : colors.textSecondary,
-                  fontSize:   font.sm,
-                  fontWeight: match.isCompleted ? '600' : '500',
-                  textAlign:  'center',
-                }}
-                numberOfLines={2}
-              >
-                {match.result ?? match.statusText}
-              </Text>
-            </View>
-          ) : null}
-
-          {/* Venue + time */}
-          <View
-            style={{
-              flexDirection:  'row',
-              alignItems:     'center',
-              justifyContent: 'center',
-              marginTop:      spacing.sm,
-            }}
-          >
-            <Ionicons name="location-outline" size={11} color={colors.textMuted} />
             <Text
-              style={{
-                color:     colors.textMuted,
-                fontSize:  font.xs,
-                marginLeft: 3,
-              }}
+              style={{ flex: 1, color: colors.textMuted, fontSize: font.xs, fontWeight: '500' }}
               numberOfLines={1}
             >
-              {match.venue}
+              {headerLabel}
             </Text>
+
+            {match.isLive && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                <LiveDot />
+                <Text style={{ color: colors.live, fontSize: font.xs, fontWeight: '700', letterSpacing: 0.5 }}>
+                  LIVE
+                </Text>
+              </View>
+            )}
+
+            {match.isUpcoming && (
+              <Text style={{ color: colors.warning, fontSize: font.sm, fontWeight: '600' }}>
+                {match.time}
+                {countdown ? `  ·  ${countdown}` : ''}
+              </Text>
+            )}
+
+            {match.isCompleted && (
+              <Text style={{ color: colors.textMuted, fontSize: font.xs, fontWeight: '600' }}>
+                FT
+              </Text>
+            )}
           </View>
-        </LinearGradient>
+
+          {/* ── Divider ────────────────────────────────────── */}
+          <View style={{ height: 1, backgroundColor: colors.borderLight, marginHorizontal: spacing.lg }} />
+
+          {/* ── Team rows ──────────────────────────────────── */}
+          <View style={{ paddingHorizontal: spacing.lg }}>
+            <HorizontalTeamRow
+              logo={match.team1Logo} shortName={match.team1Short}
+              score={match.score1}   overs={match.overs1}
+              isWinner={team1Wins}   isUpcoming={match.isUpcoming}
+            />
+            <View style={{ height: 1, backgroundColor: colors.borderLight }} />
+            <HorizontalTeamRow
+              logo={match.team2Logo} shortName={match.team2Short}
+              score={match.score2}   overs={match.overs2}
+              isWinner={team2Wins}   isUpcoming={match.isUpcoming}
+            />
+          </View>
+
+          {/* ── Footer ─────────────────────────────────────── */}
+          <View style={{ height: 1, backgroundColor: colors.borderLight, marginHorizontal: spacing.lg }} />
+          <View
+            style={{
+              flexDirection:  'row',
+              alignItems:     'center',
+              paddingHorizontal: spacing.lg,
+              paddingVertical: spacing.sm + 1,
+              gap:            spacing.md,
+            }}
+          >
+            {(match as any).isAbandoned ? (
+              <Text style={{ flex: 1, color: colors.textMuted, fontSize: font.xs, fontWeight: '600' }}>
+                No Result
+              </Text>
+            ) : resultText ? (
+              <Text
+                style={{ flex: 1, color: match.isLive ? colors.live : colors.textSecondary, fontSize: font.xs }}
+                numberOfLines={1}
+              >
+                {(() => {
+                  const txt = resultText;
+                  if (match.isCompleted && /^match starts at/i.test(txt)) return 'Result unavailable';
+                  return txt;
+                })()}
+              </Text>
+            ) : (
+              <View style={{ flex: 1 }} />
+            )}
+
+            {match.venue ? (
+              <Pressable
+                onPress={() => (match as any).venueId && router.push(`/(venue)/${(match as any).venueId}` as any)}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 3, flexShrink: 1 }}
+                hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+              >
+                <Ionicons name="location-outline" size={10} color={colors.textMuted} />
+                <Text style={{ color: colors.textMuted, fontSize: font.xs }} numberOfLines={1}>
+                  {match.venue}
+                </Text>
+              </Pressable>
+            ) : null}
+          </View>
+
+          {/* ── Prediction badges ──────────────────────────── */}
+          {match.isCompleted && (predictionResult != null || expertPredictionResult != null) && (
+            <View
+              style={{
+                flexDirection:  'row',
+                flexWrap:       'wrap',
+                gap:            spacing.sm,
+                paddingHorizontal: spacing.lg,
+                paddingBottom:  spacing.md,
+              }}
+            >
+              {predictionResult != null && (
+                <PredictionBadge label="AI" result={predictionResult} />
+              )}
+              {expertPredictionResult != null && (
+                <PredictionBadge label="Expert" result={expertPredictionResult} />
+              )}
+            </View>
+          )}
+        </View>
       </Animated.View>
     </Pressable>
   );
 });
 
-// ── FeaturedMatchCard ─────────────────────────────────────────
-// Larger hero card shown at the top of the list.
+// ── FeaturedMatchCard (hero card — home screen top) ───────────
 
 export const FeaturedMatchCard = memo(function FeaturedMatchCard({
   match,
@@ -502,246 +380,255 @@ export const FeaturedMatchCard = memo(function FeaturedMatchCard({
   match:    AdaptedMatch;
   onPress?: (id: string) => void;
 }) {
-  const scaleAnim  = useRef(new Animated.Value(1)).current;
+  const { scale, onPressIn, onPressOut } = usePressScale();
   const team1Color = getTeamColor(match.team1Short);
   const team2Color = getTeamColor(match.team2Short);
   const countdown  = match.isUpcoming ? getMatchCountdown(match.date) : '';
-  const statusCfg  = getStatusConfig(match.status);
 
   const statusLower = match.statusText.toLowerCase();
-  const team1Wins   =
-    match.isCompleted &&
+  const team1Wins   = match.isCompleted &&
     statusLower.includes(match.team1Short.toLowerCase()) &&
     statusLower.includes('won');
-  const team2Wins   =
-    match.isCompleted &&
+  const team2Wins   = match.isCompleted &&
     statusLower.includes(match.team2Short.toLowerCase()) &&
     statusLower.includes('won');
 
-  const handlePressIn = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    Animated.spring(scaleAnim, {
-      toValue: 0.97, useNativeDriver: true, speed: 50, bounciness: 4,
-    }).start();
-  };
-  const handlePressOut = () => {
-    Animated.spring(scaleAnim, {
-      toValue: 1, useNativeDriver: true, speed: 50, bounciness: 4,
-    }).start();
-  };
+  const logo1 = getTeamLogo(match.team1Logo, match.team1Short);
+  const logo2 = getTeamLogo(match.team2Logo, match.team2Short);
 
   return (
     <Pressable
       onPress={() => onPress?.(match.id)}
-      onPressIn={handlePressIn}
-      onPressOut={handlePressOut}
+      onPressIn={onPressIn}
+      onPressOut={onPressOut}
     >
       <Animated.View
         style={{
-          transform:     [{ scale: scaleAnim }],
-          marginBottom:  spacing.xl,
+          transform:     [{ scale }],
+          marginBottom:  spacing.lg,
           shadowColor:   '#000',
-          shadowOffset:  { width: 0, height: 8 },
-          shadowOpacity: 0.35,
-          shadowRadius:  20,
-          elevation:     12,
+          shadowOffset:  { width: 0, height: 2 },
+          shadowOpacity: 0.08,
+          shadowRadius:  8,
+          elevation:     3,
         }}
       >
-        {/* FEATURED label */}
-        <View style={{ position: 'absolute', top: spacing.md, left: spacing.lg, zIndex: 10 }}>
-          <View
-            style={{
-              backgroundColor: match.isLive ? colors.live : colors.accent,
-              borderRadius:    6,
-              paddingHorizontal: spacing.sm,
-              paddingVertical:   4,
-            }}
-          >
-            <Text style={{ color: '#fff', fontSize: 9, fontWeight: '800', letterSpacing: 1 }}>
-              {match.isLive ? '● LIVE NOW' : '★ FEATURED'}
-            </Text>
-          </View>
-        </View>
-
-        <LinearGradient
-          colors={[
-            team1Color + '35',
-            '#0D1421',
-            '#0A1118',
-            '#0D1421',
-            team2Color + '35',
-          ]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
+        <View
           style={{
-            borderRadius:  radius.xl,
-            padding:       spacing.xxl,
-            paddingTop:    48,
-            minHeight:     220,
-            borderWidth:   1,
-            borderColor:   match.isLive ? colors.live + '30' : colors.border,
+            backgroundColor: colors.card,
+            borderRadius:    radius.xl,
+            borderWidth:     1,
+            borderColor:     match.isLive ? '#FECACA' : colors.border,
+            overflow:        'hidden',
           }}
         >
-          {/* Stage badge */}
-          {match.matchStage !== 'LEAGUE' && (
-            <View style={{ alignItems: 'center', marginBottom: spacing.md }}>
-              <StageBadge stage={match.matchStage} />
-            </View>
-          )}
+          {/* Status bar at very top */}
+          <View
+            style={{
+              height:          3,
+              backgroundColor: match.isLive ? colors.live : match.isUpcoming ? colors.warning : colors.accent,
+            }}
+          />
 
-          {/* Date row */}
-          <View style={{ alignItems: 'center', marginBottom: spacing.xl }}>
-            <Text style={{ color: colors.textSecondary, fontSize: font.xs }}>
-              {formatMatchDate(match.date)}
-            </Text>
-          </View>
-
-          {/* Teams face-off */}
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <View style={{ flex: 1, alignItems: 'center' }}>
-              <View
-                style={{
-                  padding:     team1Wins ? 4 : 0,
-                  borderRadius: 40,
-                  borderWidth:  team1Wins ? 2 : 0,
-                  borderColor:  team1Wins ? team1Color + '80' : 'transparent',
-                }}
-              >
-                <TeamLogo logo={match.team1Logo} shortName={match.team1Short} size={68} />
-              </View>
-              <Text
-                style={{
-                  color:      team1Wins ? '#FFF' : colors.textSecondary,
-                  fontSize:   font.xl,
-                  fontWeight: team1Wins ? '800' : '600',
-                  marginTop:  spacing.sm,
-                }}
-              >
-                {match.team1Short}
-              </Text>
-              {match.score1 ? (
-                <Text style={{ color: '#FFF', fontSize: font.base, fontWeight: '700', marginTop: 2 }}>
-                  {match.score1}
-                </Text>
-              ) : null}
-              {match.overs1 ? (
-                <Text style={{ color: colors.textMuted, fontSize: font.xs }}>
-                  ({match.overs1} ov)
-                </Text>
-              ) : null}
-            </View>
-
-            {/* Center */}
-            <View style={{ alignItems: 'center', paddingHorizontal: spacing.md }}>
-              <Text
-                style={{
-                  color:      colors.textMuted + '60',
-                  fontSize:   22,
-                  fontWeight: '900',
-                }}
-              >
-                VS
-              </Text>
-              {match.isUpcoming && (
-                <View style={{ alignItems: 'center', marginTop: spacing.sm }}>
-                  <Text
+          <View style={{ padding: spacing.xxl, paddingBottom: spacing.lg }}>
+            {/* Header */}
+            <View
+              style={{
+                flexDirection:  'row',
+                alignItems:     'center',
+                justifyContent: 'space-between',
+                marginBottom:   spacing.xl,
+              }}
+            >
+              <View>
+                {match.matchStage !== 'LEAGUE' && (
+                  <View
                     style={{
-                      color:      statusCfg.color,
-                      fontSize:   font.xl,
-                      fontWeight: '800',
+                      backgroundColor: colors.accentDim,
+                      borderRadius:    4,
+                      paddingHorizontal: 8,
+                      paddingVertical:   3,
+                      alignSelf:       'flex-start',
+                      marginBottom:    6,
                     }}
                   >
+                    <Text style={{ color: colors.accent, fontSize: font.xs, fontWeight: '700', letterSpacing: 0.5 }}>
+                      {match.matchStage}
+                    </Text>
+                  </View>
+                )}
+                <Text style={{ color: colors.textMuted, fontSize: font.xs }}>
+                  {formatMatchDate(match.date)}
+                </Text>
+              </View>
+
+              {match.isLive ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <LiveDot size={7} />
+                  <Text style={{ color: colors.live, fontSize: font.sm, fontWeight: '700', letterSpacing: 0.5 }}>
+                    LIVE
+                  </Text>
+                </View>
+              ) : match.isUpcoming ? (
+                <View style={{ alignItems: 'flex-end' }}>
+                  <Text style={{ color: colors.warning, fontSize: font.base, fontWeight: '700' }}>
                     {match.time}
                   </Text>
                   {countdown ? (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: spacing.xs }}>
-                      <Ionicons name="time-outline" size={10} color={colors.textMuted} />
-                      <Text style={{ color: colors.textMuted, fontSize: font.xs, marginLeft: 3 }}>
-                        {countdown}
-                      </Text>
-                    </View>
+                    <Text style={{ color: colors.textMuted, fontSize: font.xs, marginTop: 2 }}>
+                      {countdown}
+                    </Text>
                   ) : null}
                 </View>
+              ) : (
+                <Text style={{ color: colors.textMuted, fontSize: font.xs, fontWeight: '600' }}>
+                  FT
+                </Text>
               )}
             </View>
 
-            <View style={{ flex: 1, alignItems: 'center' }}>
+            {/* Teams face-off */}
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              {/* Team 1 */}
+              <View style={{ flex: 1, alignItems: 'center', gap: spacing.sm }}>
+                {logo1 ? (
+                  <Image source={{ uri: logo1 }} style={{ width: 56, height: 56 }} resizeMode="contain" />
+                ) : (
+                  <View
+                    style={{
+                      width: 56, height: 56, borderRadius: 28,
+                      backgroundColor: team1Color + '18',
+                      alignItems: 'center', justifyContent: 'center',
+                    }}
+                  >
+                    <Text style={{ color: team1Color, fontSize: 16, fontWeight: '800' }}>
+                      {match.team1Short}
+                    </Text>
+                  </View>
+                )}
+                <Text
+                  style={{
+                    color:      team1Wins ? colors.textPrimary : colors.textSecondary,
+                    fontSize:   font.base,
+                    fontWeight: team1Wins ? '800' : '600',
+                    textAlign:  'center',
+                  }}
+                >
+                  {match.team1Short}
+                </Text>
+                {match.score1 ? (
+                  <Text
+                    style={{
+                      color:      team1Wins ? colors.textPrimary : colors.textSecondary,
+                      fontSize:   font.lg,
+                      fontWeight: team1Wins ? '800' : '600',
+                    }}
+                  >
+                    {match.score1}
+                    {match.overs1 ? (
+                      <Text style={{ color: colors.textMuted, fontSize: font.xs, fontWeight: '400' }}>
+                        {' '}({match.overs1})
+                      </Text>
+                    ) : null}
+                  </Text>
+                ) : null}
+              </View>
+
+              {/* VS separator */}
+              <View style={{ paddingHorizontal: spacing.lg, alignItems: 'center' }}>
+                <Text style={{ color: colors.textMuted, fontSize: font.sm, fontWeight: '700', letterSpacing: 1 }}>
+                  vs
+                </Text>
+              </View>
+
+              {/* Team 2 */}
+              <View style={{ flex: 1, alignItems: 'center', gap: spacing.sm }}>
+                {logo2 ? (
+                  <Image source={{ uri: logo2 }} style={{ width: 56, height: 56 }} resizeMode="contain" />
+                ) : (
+                  <View
+                    style={{
+                      width: 56, height: 56, borderRadius: 28,
+                      backgroundColor: team2Color + '18',
+                      alignItems: 'center', justifyContent: 'center',
+                    }}
+                  >
+                    <Text style={{ color: team2Color, fontSize: 16, fontWeight: '800' }}>
+                      {match.team2Short}
+                    </Text>
+                  </View>
+                )}
+                <Text
+                  style={{
+                    color:      team2Wins ? colors.textPrimary : colors.textSecondary,
+                    fontSize:   font.base,
+                    fontWeight: team2Wins ? '800' : '600',
+                    textAlign:  'center',
+                  }}
+                >
+                  {match.team2Short}
+                </Text>
+                {match.score2 ? (
+                  <Text
+                    style={{
+                      color:      team2Wins ? colors.textPrimary : colors.textSecondary,
+                      fontSize:   font.lg,
+                      fontWeight: team2Wins ? '800' : '600',
+                    }}
+                  >
+                    {match.score2}
+                    {match.overs2 ? (
+                      <Text style={{ color: colors.textMuted, fontSize: font.xs, fontWeight: '400' }}>
+                        {' '}({match.overs2})
+                      </Text>
+                    ) : null}
+                  </Text>
+                ) : null}
+              </View>
+            </View>
+
+            {/* Result / status line */}
+            {(match.result || (match.isLive && match.statusText)) ? (
               <View
                 style={{
-                  padding:     team2Wins ? 4 : 0,
-                  borderRadius: 40,
-                  borderWidth:  team2Wins ? 2 : 0,
-                  borderColor:  team2Wins ? team2Color + '80' : 'transparent',
+                  marginTop:      spacing.lg,
+                  paddingTop:     spacing.md,
+                  borderTopWidth: 1,
+                  borderTopColor: colors.border,
+                  alignItems:     'center',
                 }}
               >
-                <TeamLogo logo={match.team2Logo} shortName={match.team2Short} size={68} />
+                <Text
+                  style={{
+                    color:      match.isLive ? colors.live : colors.textSecondary,
+                    fontSize:   font.sm,
+                    fontWeight: '500',
+                    textAlign:  'center',
+                  }}
+                  numberOfLines={2}
+                >
+                  {match.result ?? match.statusText}
+                </Text>
               </View>
-              <Text
-                style={{
-                  color:      team2Wins ? '#FFF' : colors.textSecondary,
-                  fontSize:   font.xl,
-                  fontWeight: team2Wins ? '800' : '600',
-                  marginTop:  spacing.sm,
-                }}
-              >
-                {match.team2Short}
-              </Text>
-              {match.score2 ? (
-                <Text style={{ color: '#FFF', fontSize: font.base, fontWeight: '700', marginTop: 2 }}>
-                  {match.score2}
-                </Text>
-              ) : null}
-              {match.overs2 ? (
-                <Text style={{ color: colors.textMuted, fontSize: font.xs }}>
-                  ({match.overs2} ov)
-                </Text>
-              ) : null}
-            </View>
+            ) : null}
           </View>
 
-          {/* Result / status */}
-          {(match.result || (match.isLive && match.statusText)) ? (
-            <View
-              style={{
-                marginTop:      spacing.lg,
-                paddingTop:     spacing.md,
-                borderTopWidth: 1,
-                borderTopColor: colors.border,
-                alignItems:     'center',
-              }}
-            >
-              <Text
-                style={{
-                  color:      match.isLive ? colors.live : colors.textSecondary,
-                  fontSize:   font.md,
-                  fontWeight: '600',
-                  textAlign:  'center',
-                }}
-                numberOfLines={2}
-              >
-                {match.result ?? match.statusText}
-              </Text>
-            </View>
-          ) : null}
-
-          {/* Venue */}
+          {/* Venue footer */}
           <View
             style={{
               flexDirection:  'row',
               alignItems:     'center',
               justifyContent: 'center',
-              marginTop:      spacing.md,
+              gap:            4,
+              paddingBottom:  spacing.lg,
             }}
           >
-            <Ionicons name="location-outline" size={12} color={colors.textMuted} />
-            <Text
-              style={{ color: colors.textMuted, fontSize: font.xs, marginLeft: 4 }}
-              numberOfLines={1}
-            >
+            <Ionicons name="location-outline" size={11} color={colors.textMuted} />
+            <Text style={{ color: colors.textMuted, fontSize: font.xs }} numberOfLines={1}>
               {match.venue}
             </Text>
           </View>
-        </LinearGradient>
+        </View>
       </Animated.View>
     </Pressable>
   );

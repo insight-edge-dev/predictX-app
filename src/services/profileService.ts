@@ -1,45 +1,34 @@
-import { supabase } from "@/lib/supabase";
-import type { UserProfile } from "@/types/prediction";
+import api from './api';
+import type { UserProfile } from '@/types/prediction';
 
-export async function getProfile(userId: string): Promise<UserProfile | null> {
-  const { data, error } = await supabase
-    .from("profiles")
-    .select("*")
-    .eq("id", userId)
-    .single();
-
-  if (error || !data) return null;
-
-  return {
-    id: data.id,
-    email: "",
-    displayName: data.full_name ?? data.username ?? "",
-    favoriteTeams: data.favourite_teams ?? [],
-    predictionsCount: data.predictions_count ?? 0,
-    matchesTracked: data.matches_tracked ?? 0,
-    createdAt: data.created_at ?? "",
-  };
+export async function getProfile(_userId: string): Promise<UserProfile | null> {
+  try {
+    return await api.get<UserProfile>('/user/profile');
+  } catch {
+    return null;
+  }
 }
 
 export async function updateProfile(
-  userId: string,
+  _userId: string,
   updates: { displayName?: string; avatarUrl?: string },
 ): Promise<{ error: string | null }> {
-  const payload: Record<string, unknown> = {};
-  if (updates.displayName !== undefined) payload.full_name = updates.displayName;
-  if (updates.avatarUrl !== undefined)   payload.avatar_url = updates.avatarUrl;
-
-  const { error } = await supabase.from("profiles").update(payload).eq("id", userId);
-  return { error: error?.message ?? null };
+  try {
+    await api.patch('/user/profile', updates);
+    return { error: null };
+  } catch (e: any) {
+    return { error: e.message ?? 'Failed to update profile' };
+  }
 }
 
 export async function updateFavouriteTeams(
-  userId: string,
+  _userId: string,
   teams: string[],
 ): Promise<{ error: string | null }> {
-  const { error } = await supabase
-    .from("profiles")
-    .update({ favourite_teams: teams })
-    .eq("id", userId);
-  return { error: error?.message ?? null };
+  try {
+    await api.patch('/user/profile', { favouriteTeams: teams });
+    return { error: null };
+  } catch (e: any) {
+    return { error: e.message ?? 'Failed to update teams' };
+  }
 }

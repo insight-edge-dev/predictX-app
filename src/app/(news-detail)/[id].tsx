@@ -4,8 +4,9 @@
 
 import {
   View, Text, ScrollView, Pressable,
-  Image, ActivityIndicator,
+  ActivityIndicator,
 } from 'react-native';
+import { Image as ExpoImage } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -35,7 +36,7 @@ export default function NewsDetailScreen() {
   const coverUri = proxyImg(article?.coverImage?.id);
 
   return (
-    <LinearGradient colors={['#07080F', '#0D1421', '#07080F']} style={{ flex: 1 }}>
+    <View style={{ flex: 1, backgroundColor: '#F8F9FB' }}>
       <SafeAreaView style={{ flex: 1 }}>
 
         {/* Back button */}
@@ -83,14 +84,17 @@ export default function NewsDetailScreen() {
             {/* Cover image */}
             {coverUri ? (
               <View style={{ marginHorizontal: spacing.lg, borderRadius: radius.xl, overflow: 'hidden', marginBottom: spacing.xl }}>
-                <Image
+                <ExpoImage
                   source={{ uri: coverUri }}
-                  style={{ width: '100%', height: 200 }}
-                  resizeMode="cover"
+                  style={{ width: '100%', height: 220 }}
+                  contentFit="cover"
+                  cachePolicy="disk"
+                  transition={300}
+                  placeholder={{ color: colors.cardElevated }}
                 />
                 {article.coverImage?.caption ? (
-                  <View style={{ backgroundColor: '#00000080', padding: spacing.sm }}>
-                    <Text style={{ color: '#ffffffaa', fontSize: font.xs, fontStyle: 'italic' }}>
+                  <View style={{ backgroundColor: 'rgba(0,0,0,0.5)', padding: spacing.sm }}>
+                    <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: font.xs, fontStyle: 'italic' }}>
                       {article.coverImage.caption}
                     </Text>
                   </View>
@@ -129,7 +133,7 @@ export default function NewsDetailScreen() {
 
               {/* Headline */}
               <Text style={{
-                color: '#fff', fontSize: font.xl, fontWeight: '800',
+                color: colors.textPrimary, fontSize: font.xl, fontWeight: '800',
                 lineHeight: 30, marginBottom: spacing.sm, letterSpacing: -0.3,
               }}>
                 {article.headline}
@@ -178,7 +182,7 @@ export default function NewsDetailScreen() {
                   <Ionicons name="newspaper" size={18} color={colors.accent} />
                 </View>
                 <View>
-                  <Text style={{ color: '#fff', fontSize: font.sm, fontWeight: '700' }}>Cricbuzz</Text>
+                  <Text style={{ color: colors.textPrimary, fontSize: font.sm, fontWeight: '700' }}>Cricbuzz</Text>
                   <Text style={{ color: colors.textMuted, fontSize: font.xs, marginTop: 2 }}>
                     Original article on Cricbuzz
                   </Text>
@@ -188,6 +192,6 @@ export default function NewsDetailScreen() {
           </ScrollView>
         )}
       </SafeAreaView>
-    </LinearGradient>
+    </View>
   );
 }

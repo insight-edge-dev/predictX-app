@@ -1,27 +1,34 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { colors } from '@/constants/theme';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useIsFootball } from '@/contexts/LeagueContext';
 
 export default function TabLayout() {
+  const insets     = useSafeAreaInsets();
+  const isFootball = useIsFootball();
+
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
         tabBarShowLabel: true,
-        tabBarActiveTintColor:   colors.accent,
-        tabBarInactiveTintColor: colors.textMuted,
+        tabBarActiveTintColor:   isFootball ? '#16A34A' : '#2563EB',
+        tabBarInactiveTintColor: '#9CA3AF',
         tabBarLabelStyle: {
-          fontSize:   10,
-          fontWeight: '600',
-          marginTop:  2,
+          fontSize:      10,
+          fontWeight:    '600',
+          marginTop:     2,
+          letterSpacing: 0,
         },
         tabBarStyle: {
-          backgroundColor: '#0A0F1C',
-          borderTopWidth:  0.5,
-          borderTopColor:  colors.border,
-          height:          72,
-          paddingBottom:   12,
-          paddingTop:      8,
+          backgroundColor: '#FFFFFF',
+          borderTopWidth:  1,
+          borderTopColor:  '#E5E7EB',
+          height:          52 + insets.bottom,
+          paddingBottom:   insets.bottom || 6,
+          paddingTop:      6,
+          elevation:       0,
+          shadowOpacity:   0,
         },
       }}
     >
@@ -30,7 +37,7 @@ export default function TabLayout() {
         options={{
           tabBarLabel: 'Home',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="home" size={size - 2} color={color} />
+            <Ionicons name="home-outline" size={size - 2} color={color} />
           ),
         }}
       />
@@ -38,14 +45,17 @@ export default function TabLayout() {
       <Tabs.Screen
         name="(matches)"
         options={{
-          tabBarLabel: 'Matches',
+          tabBarLabel: isFootball ? 'Fixtures' : 'Matches',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="trophy" size={size - 2} color={color} />
+            <Ionicons
+              name={isFootball ? 'football-outline' : 'calendar-outline'}
+              size={size - 2}
+              color={color}
+            />
           ),
         }}
       />
 
-      {/* News tab hidden — removed from product */}
       <Tabs.Screen
         name="(news)"
         options={{ href: null }}
@@ -54,9 +64,13 @@ export default function TabLayout() {
       <Tabs.Screen
         name="(tips)"
         options={{
-          tabBarLabel: 'Predict',
+          tabBarLabel: 'PredictX',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="analytics" size={size - 2} color={color} />
+            <Ionicons
+              name={isFootball ? 'stats-chart-outline' : 'flash-outline'}
+              size={size - 2}
+              color={color}
+            />
           ),
         }}
       />
@@ -66,7 +80,7 @@ export default function TabLayout() {
         options={{
           tabBarLabel: 'Profile',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="person" size={size - 2} color={color} />
+            <Ionicons name="person-outline" size={size - 2} color={color} />
           ),
         }}
       />

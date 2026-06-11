@@ -19,13 +19,13 @@ const SECTIONS: Section[] = [
     icon: "person-circle-outline",
     title: "Account Data",
     body:
-      "We store your display name and email address to identify your account. This information is held securely in our database and is never shared with third parties. You can update or delete your account at any time from the Profile screen.",
+      "We store your phone number and display name to identify your account. Your phone number is used solely for authentication via OTP — it is never shared with third parties except our SMS provider (used only to deliver your login code). You can update or delete your account at any time from the Profile screen.",
   },
   {
     icon: "analytics-outline",
     title: "Usage & Analytics",
     body:
-      "CricketIQ does not collect behavioural tracking or advertising analytics. We may collect anonymous crash reports to improve app stability. No personally identifiable information is attached to these reports.",
+      "PredictX does not collect behavioural tracking or advertising analytics. We may collect anonymous crash reports to improve app stability. No personally identifiable information is attached to these reports.",
   },
   {
     icon: "heart-outline",
@@ -55,7 +55,7 @@ const SECTIONS: Section[] = [
     icon: "trash-outline",
     title: "Data Deletion",
     body:
-      "You may request full deletion of your account and all associated data by emailing cricketiq@gmail.com with the subject line \"Delete My Account\". Requests are processed within 7 business days.",
+      "You can delete your account directly from the Profile screen — tap 'Delete Account' at the bottom. This permanently removes all your data including phone number, display name, and favourite teams. Alternatively, email contact@predictx.app with the subject 'Delete My Account'. All data is removed within 7 days.",
   },
   {
     icon: "refresh-outline",
@@ -146,7 +146,7 @@ export default function PrivacyScreen() {
               Your Privacy Matters
             </Text>
             <Text style={{ color: colors.textSecondary, fontSize: font.sm, textAlign: "center", lineHeight: 20 }}>
-              CricketIQ is built with a privacy-first approach. We collect only what is necessary to deliver a great cricket experience — nothing more.
+              PredictX is built with a privacy-first approach. We collect only what is necessary to deliver a great cricket experience — nothing more.
             </Text>
           </View>
 

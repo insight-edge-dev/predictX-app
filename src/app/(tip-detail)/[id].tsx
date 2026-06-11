@@ -6,12 +6,18 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useMatchTip } from '@/hooks/useTips';
+import { useFootballMatchTip } from '@/hooks/useFootballTips';
+import { useIsFootball } from '@/contexts/LeagueContext';
+import { FootballProbabilityBar } from '@/components/FootballProbabilityBar';
 import { getTeamColor, getTeamLogo } from '@/theme/colors';
 import { formatMatchDate } from '@/utils/date';
 import { colors, spacing, font, radius } from '@/constants/theme';
 import type {
   TipFactor, BatterStat, BowlerStat, SeasonForm, H2HData, VenueInsights,
 } from '@/services/tipsService';
+import type {
+  PredictionFactor, FootballH2H, FootballFormEntry,
+} from '@/types/football';
 
 // ── Atoms ─────────────────────────────────────────────────────
 
@@ -150,7 +156,7 @@ function VenueTile({ icon, value, label }: { icon: string; value: string; label:
   return (
     <View style={{ flex: 1, backgroundColor: colors.cardElevated, borderRadius: radius.sm, padding: spacing.md, alignItems: 'center', gap: 4, borderWidth: 1, borderColor: colors.border }}>
       <Ionicons name={icon as any} size={16} color={colors.accent} />
-      <Text style={{ color: '#fff', fontSize: font.xl, fontWeight: '800' }}>{value}</Text>
+      <Text style={{ color: colors.textPrimary, fontSize: font.xl, fontWeight: '800' }}>{value}</Text>
       <Text style={{ color: colors.textMuted, fontSize: font.xs, textAlign: 'center', lineHeight: 14 }}>{label}</Text>
     </View>
   );
@@ -162,10 +168,10 @@ function BatterRow({ p, color }: { p: BatterStat; color: string }) {
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border + '30' }}>
       <View style={{ width: 4, height: 28, borderRadius: 2, backgroundColor: color, marginRight: spacing.sm }} />
-      <Text style={{ flex: 1, color: '#fff', fontSize: font.sm, fontWeight: '600' }} numberOfLines={1}>{p.player}</Text>
+      <Text style={{ flex: 1, color: '#111827', fontSize: font.sm, fontWeight: '600' }} numberOfLines={1}>{p.player}</Text>
       <View style={{ flexDirection: 'row', gap: spacing.lg }}>
         <View style={{ alignItems: 'center', minWidth: 32 }}>
-          <Text style={{ color: '#fff', fontSize: font.sm, fontWeight: '700' }}>{p.runs}</Text>
+          <Text style={{ color: '#111827', fontSize: font.sm, fontWeight: '700' }}>{p.runs}</Text>
           <Text style={{ color: colors.textMuted, fontSize: 9 }}>RUNS</Text>
         </View>
         <View style={{ alignItems: 'center', minWidth: 36 }}>
@@ -187,7 +193,7 @@ function BowlerRow({ p, color }: { p: BowlerStat; color: string }) {
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border + '30' }}>
       <View style={{ width: 4, height: 28, borderRadius: 2, backgroundColor: color, marginRight: spacing.sm }} />
-      <Text style={{ flex: 1, color: '#fff', fontSize: font.sm, fontWeight: '600' }} numberOfLines={1}>{p.player}</Text>
+      <Text style={{ flex: 1, color: '#111827', fontSize: font.sm, fontWeight: '600' }} numberOfLines={1}>{p.player}</Text>
       <View style={{ flexDirection: 'row', gap: spacing.lg }}>
         <View style={{ alignItems: 'center', minWidth: 36 }}>
           <Text style={{ color: colors.success, fontSize: font.sm, fontWeight: '700' }}>{p.wickets}W</Text>
@@ -208,9 +214,280 @@ function SkeletonBlock({ h = 16, br = 6, mb = 8, w = '100%' }: any) {
   return <View style={{ width: w, height: h, borderRadius: br, backgroundColor: colors.cardElevated, marginBottom: mb }} />;
 }
 
-// ── Main screen ───────────────────────────────────────────────
+// ── Football: Team badge (logo or flag fallback) ─────────────
 
-export default function TipDetailScreen() {
+function FootballTeamBadge({ logo, flag, shortName, color, size }: { logo: string; flag: string; shortName: string; color: string; size: number }) {
+  if (logo) return <Image source={{ uri: logo }} style={{ width: size, height: size }} resizeMode="contain" />;
+  return (
+    <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: color + '20', alignItems: 'center', justifyContent: 'center' }}>
+      <Text style={{ fontSize: size * 0.4 }}>{flag}</Text>
+    </View>
+  );
+}
+
+// ── Football: Factor row (home/away, two-way advantage) ──────
+
+function FootballFactorRow({ factor, c1, c2 }: { factor: PredictionFactor; c1: string; c2: string }) {
+  const adv = factor.advantage;
+  return (
+    <View style={{ paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: colors.border + '40' }}>
+      <Text style={{ color: colors.textMuted, fontSize: font.xs, fontWeight: '600', textAlign: 'center', marginBottom: 8, letterSpacing: 0.5 }}>
+        {factor.label}
+      </Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+        <View style={{ flex: 1, alignItems: 'flex-start' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            {adv === 'home' && <Ionicons name="star" size={10} color={c1} />}
+            <Text style={{ color: adv === 'home' ? c1 : colors.textSecondary, fontSize: font.sm, fontWeight: adv === 'home' ? '700' : '500' }}>
+              {factor.homeValue}
+            </Text>
+          </View>
+        </View>
+        <View style={{ alignItems: 'center', paddingHorizontal: spacing.sm }}>
+          <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: adv === 'neutral' ? colors.border : adv === 'home' ? c1 : c2 }} />
+        </View>
+        <View style={{ flex: 1, alignItems: 'flex-end' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            <Text style={{ color: adv === 'away' ? c2 : colors.textSecondary, fontSize: font.sm, fontWeight: adv === 'away' ? '700' : '500' }}>
+              {factor.awayValue}
+            </Text>
+            {adv === 'away' && <Ionicons name="star" size={10} color={c2} />}
+          </View>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+// ── Football: Form dots (W/D/L) ───────────────────────────────
+
+function FootballFormDots({ entries, color }: { entries: FootballFormEntry[]; color: string }) {
+  const RESULT_COLOR: Record<'W' | 'D' | 'L', string> = { W: colors.success, D: colors.textMuted, L: colors.danger };
+  return (
+    <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+      {entries.map((e, i) => (
+        <View key={i} style={{
+          width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center',
+          backgroundColor: RESULT_COLOR[e.result] + '20', borderWidth: 1, borderColor: RESULT_COLOR[e.result] + '60',
+        }}>
+          <Text style={{ color: RESULT_COLOR[e.result], fontSize: font.xs, fontWeight: '800' }}>{e.result}</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+// ── Football: Head-to-head summary ───────────────────────────
+
+function FootballH2HSummary({ h2h, t1, t2, c1, c2 }: { h2h: FootballH2H; t1: string; t2: string; c1: string; c2: string }) {
+  if (h2h.total === 0) {
+    return (
+      <View style={{ alignItems: 'center', paddingVertical: spacing.md }}>
+        <Ionicons name="information-circle-outline" size={20} color={colors.textMuted} />
+        <Text style={{ color: colors.textMuted, fontSize: font.sm, marginTop: spacing.xs, textAlign: 'center' }}>
+          No prior World Cup meetings on record
+        </Text>
+      </View>
+    );
+  }
+  const t1w = `${h2h.homeWinPct}%` as any;
+  const t2w = `${h2h.awayWinPct}%` as any;
+  return (
+    <View>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: spacing.sm }}>
+        <View style={{ alignItems: 'center' }}>
+          <Text style={{ color: c1, fontSize: 28, fontWeight: '800' }}>{h2h.homeWins}</Text>
+          <Text style={{ color: colors.textMuted, fontSize: font.xs }}>{t1} WINS</Text>
+        </View>
+        <View style={{ alignItems: 'center' }}>
+          <Text style={{ color: colors.textSecondary, fontSize: font.sm }}>{h2h.total} played</Text>
+          {h2h.draws > 0 && <Text style={{ color: colors.textMuted, fontSize: font.xs }}>{h2h.draws} draws</Text>}
+        </View>
+        <View style={{ alignItems: 'center' }}>
+          <Text style={{ color: c2, fontSize: 28, fontWeight: '800' }}>{h2h.awayWins}</Text>
+          <Text style={{ color: colors.textMuted, fontSize: font.xs }}>{t2} WINS</Text>
+        </View>
+      </View>
+      <View style={{ height: 10, borderRadius: 5, backgroundColor: colors.border, flexDirection: 'row', overflow: 'hidden' }}>
+        <View style={{ width: t1w, backgroundColor: c1 }} />
+        <View style={{ flex: 1, backgroundColor: c2 }} />
+      </View>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 6 }}>
+        <Text style={{ color: c1, fontSize: font.xs, fontWeight: '700' }}>{h2h.homeWinPct}%</Text>
+        <Text style={{ color: c2, fontSize: font.xs, fontWeight: '700' }}>{h2h.awayWinPct}%</Text>
+      </View>
+    </View>
+  );
+}
+
+// ── Football tip detail screen ────────────────────────────────
+
+function FootballTipDetailScreen() {
+  const { id }  = useLocalSearchParams<{ id: string }>();
+  const router  = useRouter();
+  const { data, isLoading, isError, refetch } = useFootballMatchTip(id);
+
+  const BackBtn = (
+    <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, backgroundColor: colors.bg }}>
+      <Pressable onPress={() => router.back()} style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1, flexDirection: 'row', alignItems: 'center' })} hitSlop={8}>
+        <Ionicons name="chevron-back" size={22} color={colors.textPrimary} />
+        <Text style={{ color: colors.textPrimary, fontSize: font.md, fontWeight: '600', marginLeft: 2 }}>Predictions</Text>
+      </Pressable>
+    </View>
+  );
+
+  if (isLoading) {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }}>
+        {BackBtn}
+        <View style={{ padding: spacing.lg, gap: spacing.md }}>
+          <SkeletonBlock h={220} br={radius.xl} mb={spacing.md} />
+          <SkeletonBlock h={140} br={radius.lg} mb={spacing.md} />
+          <SkeletonBlock h={120} br={radius.lg} mb={spacing.md} />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (isError || !data) {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }}>
+        {BackBtn}
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xxxl }}>
+          <Ionicons name="cloud-offline-outline" size={48} color={colors.danger} />
+          <Text style={{ color: colors.textPrimary, fontSize: font.lg, fontWeight: '700', marginTop: spacing.lg, marginBottom: spacing.xl }}>Failed to load prediction</Text>
+          <Pressable onPress={() => refetch()} style={{ backgroundColor: colors.accent, borderRadius: radius.sm, paddingHorizontal: 32, paddingVertical: 10 }}>
+            <Text style={{ color: '#FFFFFF', fontWeight: '700' }}>Retry</Text>
+          </Pressable>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const { match, tip } = data;
+  const t1 = match.homeTeam;
+  const t2 = match.awayTeam;
+  const c1 = t1.color;
+  const c2 = t2.color;
+  const winnerName = tip.winner === t1.shortName ? t1.name : tip.winner === t2.shortName ? t2.name : 'Draw';
+
+  return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }}>
+      {BackBtn}
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: spacing.lg, paddingBottom: 80 }}>
+
+        {/* ── Hero prediction card ── */}
+        <LinearGradient
+          colors={[c1 + '22', colors.card, colors.card, c2 + '22']}
+          start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }}
+          style={{ borderRadius: radius.xl, borderWidth: 1, borderColor: colors.border, padding: spacing.xl, marginBottom: spacing.md }}
+        >
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.xl }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+              <Ionicons name="sparkles" size={12} color={colors.accent} />
+              <Text style={{ color: colors.accent, fontSize: font.xs, fontWeight: '700', letterSpacing: 1 }}>PREDICTX</Text>
+            </View>
+            <ConfidenceBadge label={tip.confidenceLabel} />
+          </View>
+
+          {/* Teams + crests */}
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <View style={{ flex: 1, alignItems: 'center', gap: spacing.sm }}>
+              <FootballTeamBadge logo={t1.logo} flag={t1.flag} shortName={t1.shortName} color={c1} size={64} />
+              <Text style={{ color: colors.textPrimary, fontSize: font.lg, fontWeight: '700' }}>{t1.shortName}</Text>
+            </View>
+            <Text style={{ color: colors.textMuted + '50', fontSize: font.xxl, fontWeight: '900', paddingHorizontal: spacing.sm }}>VS</Text>
+            <View style={{ flex: 1, alignItems: 'center', gap: spacing.sm }}>
+              <FootballTeamBadge logo={t2.logo} flag={t2.flag} shortName={t2.shortName} color={c2} size={64} />
+              <Text style={{ color: colors.textPrimary, fontSize: font.lg, fontWeight: '700' }}>{t2.shortName}</Text>
+            </View>
+          </View>
+
+          {/* 3-way probability bar */}
+          <View style={{ marginTop: spacing.xl }}>
+            <FootballProbabilityBar
+              homeTeam={t1.shortName}
+              awayTeam={t2.shortName}
+              homeWin={tip.homeWin}
+              draw={tip.draw}
+              awayWin={tip.awayWin}
+              isKnockout={tip.isKnockout}
+            />
+          </View>
+
+          {/* Winner callout */}
+          <View style={{ marginTop: spacing.lg, alignItems: 'center' }}>
+            <Text style={{ color: colors.textMuted, fontSize: font.xs }}>Predicted Result</Text>
+            <Text style={{ color: colors.textPrimary, fontSize: font.xl, fontWeight: '800', marginTop: 3 }}>
+              {tip.winner ? winnerName : 'Draw'}
+            </Text>
+          </View>
+
+          {/* Stage + date + venue */}
+          <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: spacing.md, gap: spacing.sm, flexWrap: 'wrap' }}>
+            <Ionicons name="trophy-outline" size={11} color={colors.textMuted} />
+            <Text style={{ color: colors.textMuted, fontSize: font.xs }}>{match.stage}</Text>
+            <Text style={{ color: colors.border }}>•</Text>
+            <Ionicons name="calendar-outline" size={11} color={colors.textMuted} />
+            <Text style={{ color: colors.textMuted, fontSize: font.xs }}>{formatMatchDate(match.date)}</Text>
+            <Text style={{ color: colors.border }}>•</Text>
+            <Ionicons name="location-outline" size={11} color={colors.textMuted} />
+            <Text style={{ color: colors.textMuted, fontSize: font.xs }} numberOfLines={1}>{match.venue || match.city}</Text>
+          </View>
+        </LinearGradient>
+
+        {/* ── Key Factors ── */}
+        {tip.factors.length > 0 && (
+          <SectionCard title="KEY FACTORS">
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingBottom: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border + '40' }}>
+              <Text style={{ color: c1, fontSize: font.xs, fontWeight: '700' }}>{t1.shortName}</Text>
+              <Text style={{ color: c2, fontSize: font.xs, fontWeight: '700' }}>{t2.shortName}</Text>
+            </View>
+            {tip.factors.map(f => <FootballFactorRow key={f.label} factor={f} c1={c1} c2={c2} />)}
+          </SectionCard>
+        )}
+
+        {/* ── Head to Head ── */}
+        <SectionCard title="HEAD TO HEAD">
+          <FootballH2HSummary h2h={tip.h2hData} t1={t1.shortName} t2={t2.shortName} c1={c1} c2={c2} />
+        </SectionCard>
+
+        {/* ── Recent Form ── */}
+        {(tip.recentForm.home.length > 0 || tip.recentForm.away.length > 0) && (
+          <SectionCard title="RECENT FORM">
+            <View style={{ gap: spacing.lg }}>
+              {tip.recentForm.home.length > 0 && (
+                <View>
+                  <Text style={{ color: c1, fontSize: font.xs, fontWeight: '700', marginBottom: spacing.sm }}>{t1.shortName}</Text>
+                  <FootballFormDots entries={tip.recentForm.home} color={c1} />
+                </View>
+              )}
+              {tip.recentForm.away.length > 0 && (
+                <View>
+                  <Text style={{ color: c2, fontSize: font.xs, fontWeight: '700', marginBottom: spacing.sm }}>{t2.shortName}</Text>
+                  <FootballFormDots entries={tip.recentForm.away} color={c2} />
+                </View>
+              )}
+            </View>
+          </SectionCard>
+        )}
+
+        {/* ── Disclaimer ── */}
+        <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, padding: spacing.md, backgroundColor: colors.cardElevated, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border }}>
+          <Ionicons name="information-circle-outline" size={14} color={colors.textMuted} style={{ marginTop: 1 }} />
+          <Text style={{ flex: 1, color: colors.textMuted, fontSize: font.xs, lineHeight: 18 }}>
+            Predictions use FIFA rankings, recent form and stage context. Head-to-head and live stats are limited for this competition.
+          </Text>
+        </View>
+
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+// ── Cricket tip detail screen ─────────────────────────────────
+
+function CricketTipDetailScreen() {
   const { id }  = useLocalSearchParams<{ id: string }>();
   const router  = useRouter();
   const { data, isLoading, isError, refetch } = useMatchTip(id ?? '');
@@ -218,8 +495,8 @@ export default function TipDetailScreen() {
   const BackBtn = (
     <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, backgroundColor: colors.bg }}>
       <Pressable onPress={() => router.back()} style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1, flexDirection: 'row', alignItems: 'center' })} hitSlop={8}>
-        <Ionicons name="chevron-back" size={22} color="#fff" />
-        <Text style={{ color: '#fff', fontSize: font.md, fontWeight: '600', marginLeft: 2 }}>Predictions</Text>
+        <Ionicons name="chevron-back" size={22} color={colors.textPrimary} />
+        <Text style={{ color: colors.textPrimary, fontSize: font.md, fontWeight: '600', marginLeft: 2 }}>Predictions</Text>
       </Pressable>
     </View>
   );
@@ -243,9 +520,9 @@ export default function TipDetailScreen() {
         {BackBtn}
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xxxl }}>
           <Ionicons name="cloud-offline-outline" size={48} color={colors.danger} />
-          <Text style={{ color: '#fff', fontSize: font.lg, fontWeight: '700', marginTop: spacing.lg, marginBottom: spacing.xl }}>Failed to load prediction</Text>
+          <Text style={{ color: colors.textPrimary, fontSize: font.lg, fontWeight: '700', marginTop: spacing.lg, marginBottom: spacing.xl }}>Failed to load prediction</Text>
           <Pressable onPress={() => refetch()} style={{ backgroundColor: colors.accent, borderRadius: radius.sm, paddingHorizontal: 32, paddingVertical: 10 }}>
-            <Text style={{ color: '#fff', fontWeight: '700' }}>Retry</Text>
+            <Text style={{ color: '#FFFFFF', fontWeight: '700' }}>Retry</Text>
           </Pressable>
         </View>
       </SafeAreaView>
@@ -273,7 +550,7 @@ export default function TipDetailScreen() {
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.xl }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
               <Ionicons name="sparkles" size={12} color={colors.accent} />
-              <Text style={{ color: colors.accent, fontSize: font.xs, fontWeight: '700', letterSpacing: 1 }}>AI PREDICTION</Text>
+              <Text style={{ color: colors.accent, fontSize: font.xs, fontWeight: '700', letterSpacing: 1 }}>PREDICTX</Text>
             </View>
             <ConfidenceBadge label={tip.confidenceLabel} />
           </View>
@@ -282,7 +559,7 @@ export default function TipDetailScreen() {
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
             <View style={{ flex: 1, alignItems: 'center', gap: spacing.sm }}>
               <TeamLogo logo={t1.logo} short={t1.shortName} size={64} />
-              <Text style={{ color: '#fff', fontSize: font.lg, fontWeight: '700' }}>{t1.shortName}</Text>
+              <Text style={{ color: colors.textPrimary, fontSize: font.lg, fontWeight: '700' }}>{t1.shortName}</Text>
               <Text style={{ fontSize: 36, fontWeight: '800', color: tip.team1Pct >= tip.team2Pct ? c1 : colors.textSecondary }}>
                 {tip.team1Pct}%
               </Text>
@@ -290,7 +567,7 @@ export default function TipDetailScreen() {
             <Text style={{ color: colors.textMuted + '50', fontSize: font.xxl, fontWeight: '900', paddingHorizontal: spacing.sm }}>VS</Text>
             <View style={{ flex: 1, alignItems: 'center', gap: spacing.sm }}>
               <TeamLogo logo={t2.logo} short={t2.shortName} size={64} />
-              <Text style={{ color: '#fff', fontSize: font.lg, fontWeight: '700' }}>{t2.shortName}</Text>
+              <Text style={{ color: colors.textPrimary, fontSize: font.lg, fontWeight: '700' }}>{t2.shortName}</Text>
               <Text style={{ fontSize: 36, fontWeight: '800', color: tip.team2Pct >= tip.team1Pct ? c2 : colors.textSecondary }}>
                 {tip.team2Pct}%
               </Text>
@@ -306,7 +583,7 @@ export default function TipDetailScreen() {
           {/* Winner callout */}
           <View style={{ marginTop: spacing.lg, alignItems: 'center' }}>
             <Text style={{ color: colors.textMuted, fontSize: font.xs }}>Predicted Winner</Text>
-            <Text style={{ color: '#fff', fontSize: font.xl, fontWeight: '800', marginTop: 3 }}>
+            <Text style={{ color: colors.textPrimary, fontSize: font.xl, fontWeight: '800', marginTop: 3 }}>
               {tip.winner === t1.shortName ? t1.name : t2.name}
             </Text>
           </View>
@@ -350,7 +627,7 @@ export default function TipDetailScreen() {
               <VenueTile icon="shuffle-outline"             value={`${tip.venueInsights.tossWinnerWinPct}%`}    label={'Toss Winner\nWins'} />
             </View>
             <Text style={{ color: colors.textMuted, fontSize: font.xs, textAlign: 'center', paddingHorizontal: spacing.lg, paddingBottom: spacing.lg }}>
-              Based on {tip.venueInsights.totalMatches} IPL matches at this ground
+              Based on {tip.venueInsights.totalMatches} matches at this ground
             </Text>
           </SectionCard>
         )}
@@ -425,11 +702,18 @@ export default function TipDetailScreen() {
         <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, padding: spacing.md, backgroundColor: colors.cardElevated, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border }}>
           <Ionicons name="information-circle-outline" size={14} color={colors.textMuted} style={{ marginTop: 1 }} />
           <Text style={{ flex: 1, color: colors.textMuted, fontSize: font.xs, lineHeight: 18 }}>
-            Predictions use IPL data (2008–2025) and current season form. For entertainment purposes only.
+            Predictions use historical match data and current season form.
           </Text>
         </View>
 
       </ScrollView>
     </SafeAreaView>
   );
+}
+
+// ── Main screen ───────────────────────────────────────────────
+
+export default function TipDetailScreen() {
+  const isFootball = useIsFootball();
+  return isFootball ? <FootballTipDetailScreen /> : <CricketTipDetailScreen />;
 }

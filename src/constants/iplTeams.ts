@@ -91,12 +91,11 @@ export const IPL_TEAMS: Record<string, IPLTeam> = {
 };
 
 /**
- * Returns the Cloudinary logo URL for a known IPL team.
- * Returns empty string for unknown teams — caller renders text fallback.
- * Never uses API-provided image URLs.
+ * Returns the best available logo URL for a team.
+ * Priority: 1) self-hosted Cloudinary (IPL teams)  2) Sportsmonks image_path  3) ""
  */
-export function getIPLTeamLogoUrl(shortName: string, _apiImageId?: string): string {
-  return IPL_TEAMS[shortName]?.officialLogoUrl ?? "";
+export function getIPLTeamLogoUrl(shortName: string, apiImageUrl?: string): string {
+  return IPL_TEAMS[shortName]?.officialLogoUrl ?? apiImageUrl ?? "";
 }
 
 /** Returns team brand color or grey if unknown. */

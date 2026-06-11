@@ -58,6 +58,8 @@ export interface AdaptedMatch {
 
   // Result line (non-null only for completed)
   result:       string | null;
+  // Winning team name ("Lahore Qalandars", "MI", etc.) — from backend winner field
+  winner:       string | null;
 
   // Context
   venue:        string;
@@ -80,8 +82,8 @@ export function adaptMatch(raw: Match): AdaptedMatch {
   const isLive      = status === 'live';
   const isUpcoming  = status === 'upcoming';
 
-  // Result line: use statusText when completed (it carries "CSK won by 5 wkts" etc.)
   const result = isCompleted && statusText ? statusText : null;
+  const winner = (r as any).winner ?? null;
 
   return {
     id:          r.id          ?? '',
@@ -106,6 +108,7 @@ export function adaptMatch(raw: Match): AdaptedMatch {
     isCompleted,
 
     result,
+    winner,
 
     venue:       r.venue      ?? '',
     date:        r.date       ?? '',

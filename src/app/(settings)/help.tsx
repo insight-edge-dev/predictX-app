@@ -9,12 +9,12 @@ import { colors, spacing, font, radius } from "@/constants/theme";
 
 const FAQS = [
   {
-    q: "What is CricketIQ?",
-    a: "CricketIQ is an IPL companion app that gives you live scores, match schedules, squad information, historical statistics, and AI-powered match predictions — all in one place.",
+    q: "What is PredictX?",
+    a: "PredictX is a multi-league cricket companion app that gives you live scores, match schedules, squad information, historical statistics, and AI-powered match predictions — all in one place.",
   },
   {
     q: "How are match predictions calculated?",
-    a: "Predictions use a 7-factor algorithm trained on IPL data from 2008 to 2025. Factors include team rating, recent form, head-to-head record, venue performance, batting strength, bowling strength, and toss impact. Each factor is weighted by its historical predictive value.",
+    a: "Predictions use a 7-factor algorithm built on historical cricket data. Factors include team rating, recent form, head-to-head record, venue performance, batting strength, bowling strength, and toss impact. Each factor is weighted by its historical predictive value.",
   },
   {
     q: "How accurate are the predictions?",
@@ -33,12 +33,12 @@ const FAQS = [
     a: "A 'No Result' is recorded when a match is abandoned due to rain, bad light, or other external conditions before a result can be reached — typically before the minimum number of overs is completed.",
   },
   {
-    q: "Can I use CricketIQ without an account?",
-    a: "Currently an account is required to use CricketIQ. This allows us to save your preferences, favourite teams, and personalise your experience across devices.",
+    q: "Can I use PredictX without an account?",
+    a: "Currently an account is required to use PredictX. This allows us to save your preferences, favourite teams, and personalise your experience across devices.",
   },
   {
     q: "How do I delete my account?",
-    a: "Email us at cricketiq@gmail.com with the subject line \"Delete My Account\". We will permanently delete your account and all associated data within 7 business days.",
+    a: "Go to Profile → scroll to the bottom → tap 'Delete Account'. This permanently deletes all your data immediately. Alternatively, email contact@predictx.app with subject 'Delete My Account' and we'll process it within 7 days.",
   },
   {
     q: "The app is showing outdated scores — what should I do?",
@@ -149,7 +149,7 @@ function ContactCard() {
       </View>
 
       <Pressable
-        onPress={() => Linking.openURL("mailto:cricketiq@gmail.com?subject=Support Request")}
+        onPress={() => Linking.openURL("mailto:contact@predictx.app?subject=Support Request")}
         style={({ pressed }) => ({
           opacity: pressed ? 0.8 : 1,
           flexDirection: "row", alignItems: "center", justifyContent: "center",
@@ -160,14 +160,14 @@ function ContactCard() {
       >
         <Ionicons name="mail-outline" size={16} color={colors.bg} />
         <Text style={{ color: colors.bg, fontSize: font.md, fontWeight: "700" }}>
-          cricketiq@gmail.com
+          contact@predictx.app
         </Text>
       </Pressable>
 
       {/* Quick contact options */}
       <View style={{ flexDirection: "row", gap: spacing.sm, marginTop: spacing.sm }}>
         <Pressable
-          onPress={() => Linking.openURL("mailto:cricketiq@gmail.com?subject=Bug Report")}
+          onPress={() => Linking.openURL("mailto:contact@predictx.app?subject=Bug Report")}
           style={({ pressed }) => ({
             flex: 1, opacity: pressed ? 0.7 : 1,
             flexDirection: "row", alignItems: "center", justifyContent: "center",
@@ -182,7 +182,7 @@ function ContactCard() {
           </Text>
         </Pressable>
         <Pressable
-          onPress={() => Linking.openURL("mailto:cricketiq@gmail.com?subject=Feature Request")}
+          onPress={() => Linking.openURL("mailto:contact@predictx.app?subject=Feature Request")}
           style={({ pressed }) => ({
             flex: 1, opacity: pressed ? 0.7 : 1,
             flexDirection: "row", alignItems: "center", justifyContent: "center",
@@ -226,7 +226,7 @@ export default function HelpScreen() {
           ))}
 
           <Text style={{ color: colors.textMuted, fontSize: font.xs, textAlign: "center", marginTop: spacing.xl }}>
-            Still stuck? Email us at cricketiq@gmail.com
+            Still stuck? Email us at contact@predictx.app
           </Text>
         </ScrollView>
       </SafeAreaView>

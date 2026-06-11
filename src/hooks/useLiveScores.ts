@@ -1,17 +1,14 @@
-/**
- * useLiveScores.ts — WebSocket hook for real-time IPL live scores.
- *
- * Connects to ws://<host>/ws and listens for { type: "ipl:live", matches: [...] }.
- *
- * Each match in the payload has a `matchKey` = sorted team shorts joined by ":"
- * (e.g. "CSK:RCB"). Use getLiveScore(t1Short, t2Short) to look up scores for
- * a match card.
- *
- * Auto-reconnects every 5 s on disconnect. Cleans up on unmount.
- */
-
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { WS_BASE_URL } from '@/config/api';
+import { useLeague } from '@/contexts/LeagueContext';
+
+export interface LiveBatsman {
+  name: string; runs: number; balls: number;
+  fours: number; sixes: number; sr: string; isStrike: boolean;
+}
+export interface LiveBowler {
+  name: string; overs: number; wickets: number; runs: number; eco: string; active: boolean;
+}
 
 export interface LiveScore {
   cricbuzzId:  number;
@@ -23,22 +20,52 @@ export interface LiveScore {
   overs2:      string | null;
   statusText:  string;
   status:      'live' | 'completed' | 'upcoming';
+  batsmen?:    LiveBatsman[];
+  bowlers?:    LiveBowler[];
 }
 
-// Map keyed by matchKey ("CSK:RCB") → LiveScore
 type ScoreMap = Map<string, LiveScore>;
 
 function makeKey(t1: string, t2: string) {
   return [t1, t2].sort().join(':');
 }
 
-export function useLiveScores() {
-  const [scores, setScores]       = useState<ScoreMap>(new Map());
-  const [connected, setConnected] = useState(false);
+function buildScoreMap(matches: LiveScore[]): ScoreMap {
+  const map: ScoreMap = new Map();
+  for (const m of matches) {
+    map.set(makeKey(m.team1Short, m.team2Short), m);
+  }
+  return map;
+}
 
-  const wsRef         = useRef<WebSocket | null>(null);
-  const retryTimer    = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const unmountedRef  = useRef(false);
+export function useLiveScores() {
+  const { league }    = useLeague();
+  const leagueSlugRef = useRef(league.id);
+
+  const [scores, setScores]                   = useState<ScoreMap>(new Map());
+  const [connected, setConnected]             = useState(false);
+  const [hasReceivedData, setHasReceivedData] = useState(false);
+  const [lastUpdatedAt, setLastUpdatedAt]     = useState(0);
+
+  const wsRef             = useRef<WebSocket | null>(null);
+  const retryTimer        = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const unmountedRef      = useRef(false);
+  // Stores the last byLeague payload so we can re-filter when league changes
+  const lastByLeagueRef   = useRef<Record<string, LiveScore[]>>({});
+
+  // Keep slug ref in sync — message handler reads this ref, not closure
+  useEffect(() => {
+    const slug = league.id;
+    leagueSlugRef.current = slug;
+
+    // Re-apply last received payload for the newly selected league
+    const matches = lastByLeagueRef.current[slug] ?? [];
+    setScores(buildScoreMap(matches));
+    // Only mark authoritative if we actually had data for this league
+    if (Object.keys(lastByLeagueRef.current).length > 0) {
+      setHasReceivedData(true);
+    }
+  }, [league.id]);
 
   const connect = useCallback(() => {
     if (unmountedRef.current) return;
@@ -49,23 +76,30 @@ export function useLiveScores() {
 
       ws.onopen = () => {
         if (unmountedRef.current) { ws.close(); return; }
-        console.log('[LiveScores] WebSocket connected');
         setConnected(true);
       };
 
       ws.onmessage = (event) => {
         try {
           const msg = JSON.parse(event.data as string);
-          // ipl:hello is a keep-alive ack — no action needed
           if (msg.type === 'ipl:hello') return;
-          if (msg.type !== 'ipl:live' || !Array.isArray(msg.matches)) return;
 
-          const next: ScoreMap = new Map();
-          for (const m of msg.matches) {
-            const key = makeKey(m.team1Short, m.team2Short);
-            next.set(key, m as LiveScore);
+          // ── New multi-league format ───────────────────
+          if (msg.type === 'leagues:live' && msg.byLeague) {
+            lastByLeagueRef.current = msg.byLeague as Record<string, LiveScore[]>;
+            const matches = (msg.byLeague as Record<string, LiveScore[]>)[leagueSlugRef.current] ?? [];
+            setScores(buildScoreMap(matches));
+            setHasReceivedData(true);
+            setLastUpdatedAt(Date.now());
+            return;
           }
-          setScores(next);
+
+          // ── Backward compat: ipl:live ─────────────────
+          if (msg.type === 'ipl:live' && leagueSlugRef.current === 'ipl' && Array.isArray(msg.matches)) {
+            setScores(buildScoreMap(msg.matches as LiveScore[]));
+            setHasReceivedData(true);
+            setLastUpdatedAt(Date.now());
+          }
         } catch {
           // ignore malformed messages
         }
@@ -73,17 +107,15 @@ export function useLiveScores() {
 
       ws.onclose = () => {
         if (unmountedRef.current) return;
-        console.log('[LiveScores] WebSocket disconnected — retrying in 5 s');
         setConnected(false);
-        setScores(new Map()); // clear stale scores so we don't show old live data
+        setHasReceivedData(false);
+        setScores(new Map());
+        lastByLeagueRef.current = {};
         retryTimer.current = setTimeout(connect, 5_000);
       };
 
-      ws.onerror = () => {
-        ws.close(); // triggers onclose which handles retry
-      };
+      ws.onerror = () => { ws.close(); };
     } catch {
-      // WebSocket constructor threw (bad URL etc.) — retry
       retryTimer.current = setTimeout(connect, 5_000);
     }
   }, []);
@@ -96,19 +128,17 @@ export function useLiveScores() {
       unmountedRef.current = true;
       if (retryTimer.current) clearTimeout(retryTimer.current);
       if (wsRef.current) {
-        wsRef.current.onclose = null; // prevent retry on intentional close
+        wsRef.current.onclose = null;
         wsRef.current.close();
       }
     };
   }, [connect]);
 
-  // Lookup helper: pass both team shorts in any order
   const getLiveScore = useCallback(
-    (t1Short: string, t2Short: string): LiveScore | null => {
-      return scores.get(makeKey(t1Short, t2Short)) ?? null;
-    },
+    (t1Short: string, t2Short: string): LiveScore | null =>
+      scores.get(makeKey(t1Short, t2Short)) ?? null,
     [scores],
   );
 
-  return { getLiveScore, scores, connected, scoreCount: scores.size };
+  return { getLiveScore, scores, connected, hasReceivedData, scoreCount: scores.size, lastUpdatedAt };
 }

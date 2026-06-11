@@ -70,10 +70,7 @@ export const NextMatchCard = memo(function NextMatchCard({ match, onPress }: Nex
           <View style={{ flex: 1, height: 3, backgroundColor: team2Color }} />
         </View>
 
-        <LinearGradient
-          colors={[team1Color + "15", "#0D1421", "#0A1118", "#0D1421", team2Color + "15"]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
+        <View
           style={{
             borderBottomLeftRadius: 20,
             borderBottomRightRadius: 20,
@@ -81,6 +78,7 @@ export const NextMatchCard = memo(function NextMatchCard({ match, onPress }: Nex
             borderWidth: 1,
             borderTopWidth: 0,
             borderColor: colors.border,
+            backgroundColor: colors.card,
           }}
         >
           {/* Next match label */}
@@ -99,7 +97,7 @@ export const NextMatchCard = memo(function NextMatchCard({ match, onPress }: Nex
           <View style={{ flexDirection: "row", alignItems: "center" }}>
             <View style={{ flex: 1, alignItems: "center" }}>
               <TeamLogo imageId={match.team1.logo} shortName={match.team1.shortName} size={52} />
-              <Text style={{ color: "#FFFFFF", fontSize: 16, fontWeight: "700", marginTop: 8 }}>
+              <Text style={{ color: colors.textPrimary, fontSize: 16, fontWeight: "700", marginTop: 8 }}>
                 {match.team1.shortName}
               </Text>
             </View>
@@ -135,7 +133,7 @@ export const NextMatchCard = memo(function NextMatchCard({ match, onPress }: Nex
 
             <View style={{ flex: 1, alignItems: "center" }}>
               <TeamLogo imageId={match.team2.logo} shortName={match.team2.shortName} size={52} />
-              <Text style={{ color: "#FFFFFF", fontSize: 16, fontWeight: "700", marginTop: 8 }}>
+              <Text style={{ color: colors.textPrimary, fontSize: 16, fontWeight: "700", marginTop: 8 }}>
                 {match.team2.shortName}
               </Text>
             </View>
@@ -148,7 +146,7 @@ export const NextMatchCard = memo(function NextMatchCard({ match, onPress }: Nex
               {match.venue}
             </Text>
           </View>
-        </LinearGradient>
+        </View>
       </Animated.View>
     </Pressable>
   );

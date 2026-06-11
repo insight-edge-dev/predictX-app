@@ -3,7 +3,7 @@
  *
  * Tabs: Scorecard | Overview | Squad
  *
- * Scorecard tab shows per-player batting stats with CricketIQ
+ * Scorecard tab shows per-player batting stats with PredictX
  * predicted scores visualised as a bar alongside actuals.
  *
  * "Live Intelligence" card appears at the top of Scorecard when
@@ -18,17 +18,27 @@ import {
   Image,
   ActivityIndicator,
 } from 'react-native';
-import { useState } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import { useQuery } from '@tanstack/react-query';
 import { useFullMatch } from '@/hooks/useMatches';
 import { usePredictions, findPrediction, type PlayerPrediction, type MatchPredictions } from '@/hooks/usePredictions';
+import { useTipsList } from '@/hooks/useTips';
+import { useLineup, type LineupPlayer } from '@/hooks/useLineup';
+import { useOvers, type Over, type Delivery } from '@/hooks/useOvers';
+import { useFootballMatchDetail } from '@/hooks/useFootballMatches';
+import { useFootballMatchTip } from '@/hooks/useFootballTips';
+import { useIsFootball } from '@/contexts/LeagueContext';
+import { FootballProbabilityBar } from '@/components/FootballProbabilityBar';
 import { type FullMatch } from '@/services/matchService';
+import type { FootballMatch } from '@/types/football';
 import { colors, spacing, font, radius } from '@/constants/theme';
 import { getTeamColor, getTeamLogo } from '@/theme/colors';
 import { formatMatchDate } from '@/utils/date';
+import api from '@/services/api';
 
 // ── Extended backend type ─────────────────────────────────────
 
@@ -40,14 +50,42 @@ type RawFull = FullMatch & {
   winner?:     string;
   series?:     string;
   seriesId?:   string | null;
+  venueId?:    string | null;
+  manOfMatch?: { id: number; name: string; image: string; role: string } | null;
+  officials?:  { umpire1: string | null; umpire2: string | null; tvUmpire: string | null } | null;
 };
 
 // ── Tabs ──────────────────────────────────────────────────────
 
-const TABS = ['Scorecard', 'Overview', 'Squad'] as const;
+const TABS = ['Scorecard', 'Overview', 'Squad', 'XI', 'Commentary'] as const;
 type Tab = (typeof TABS)[number];
 
 // ── Helpers ───────────────────────────────────────────────────
+
+function smPlayerImage(playerId: string): string {
+  const id = parseInt(playerId, 10);
+  if (isNaN(id) || id <= 0) return '';
+  return `https://cdn.sportmonks.com/images/cricket/players/${id % 32}/${id}.png`;
+}
+
+function PlayerAvatar({ uri, initial, size }: { uri: string; initial: string; size: number }) {
+  const [failed, setFailed] = useState(false);
+  const onError = useCallback(() => setFailed(true), []);
+  if (uri && !failed) {
+    return (
+      <Image
+        source={{ uri }}
+        style={{ width: size, height: size, borderRadius: size / 2, marginRight: 8, backgroundColor: colors.cardElevated }}
+        onError={onError}
+      />
+    );
+  }
+  return (
+    <View style={{ width: size, height: size, borderRadius: size / 2, marginRight: 8, backgroundColor: colors.cardElevated, alignItems: 'center', justifyContent: 'center' }}>
+      <Text style={{ color: colors.textMuted, fontSize: size * 0.32, fontWeight: '700' }}>{initial}</Text>
+    </View>
+  );
+}
 
 function winnerFromStatus(statusText: string, t1Short: string, t2Short: string) {
   const s = statusText.toLowerCase();
@@ -100,7 +138,7 @@ function MatchHeader({ raw }: { raw: RawFull }) {
   return (
     <View>
       <LinearGradient
-        colors={[t1Color + '55', '#0B0F1A', '#0B0F1A', t2Color + '55']}
+        colors={[t1Color + '25', colors.card, colors.card, t2Color + '25']}
         start={{ x: 0, y: 0.5 }}
         end={{ x: 1, y: 0.5 }}
         style={{ paddingBottom: spacing.xxl }}
@@ -134,7 +172,7 @@ function MatchHeader({ raw }: { raw: RawFull }) {
               <TeamLogo logo={t1.logo} shortName={t1.shortName} size={72} />
             </View>
             <Text style={{
-              color: t1Wins ? '#FFFFFF' : colors.textSecondary,
+              color: t1Wins ? colors.textPrimary : colors.textSecondary,
               fontSize: font.lg, fontWeight: t1Wins ? '800' : '600',
               marginTop: spacing.sm, textAlign: 'center',
             }}>
@@ -142,7 +180,7 @@ function MatchHeader({ raw }: { raw: RawFull }) {
             </Text>
             {raw.score1 ? (
               <Text style={{
-                color: t1Wins ? '#FFFFFF' : colors.textSecondary,
+                color: t1Wins ? colors.textPrimary : colors.textSecondary,
                 fontSize: 26, fontWeight: '800', marginTop: spacing.xs, letterSpacing: -0.5,
               }}>
                 {raw.score1}
@@ -181,7 +219,7 @@ function MatchHeader({ raw }: { raw: RawFull }) {
               <TeamLogo logo={t2.logo} shortName={t2.shortName} size={72} />
             </View>
             <Text style={{
-              color: t2Wins ? '#FFFFFF' : colors.textSecondary,
+              color: t2Wins ? colors.textPrimary : colors.textSecondary,
               fontSize: font.lg, fontWeight: t2Wins ? '800' : '600',
               marginTop: spacing.sm, textAlign: 'center',
             }}>
@@ -189,7 +227,7 @@ function MatchHeader({ raw }: { raw: RawFull }) {
             </Text>
             {raw.score2 ? (
               <Text style={{
-                color: t2Wins ? '#FFFFFF' : colors.textSecondary,
+                color: t2Wins ? colors.textPrimary : colors.textSecondary,
                 fontSize: 26, fontWeight: '800', marginTop: spacing.xs, letterSpacing: -0.5,
               }}>
                 {raw.score2}
@@ -213,7 +251,7 @@ function MatchHeader({ raw }: { raw: RawFull }) {
             borderWidth: 1, borderColor: isLive ? colors.live + '30' : colors.border,
           }}>
             <Text style={{
-              color: isLive ? colors.live : isDone ? '#FFFFFF' : colors.textSecondary,
+              color: isLive ? colors.live : colors.textSecondary,
               fontSize: font.sm, fontWeight: isDone ? '700' : '500', textAlign: 'center',
             }} numberOfLines={2}>
               {statusText}
@@ -251,17 +289,19 @@ function MatchHeader({ raw }: { raw: RawFull }) {
 
 function TabBar({ active, onChange }: { active: Tab; onChange: (t: Tab) => void }) {
   return (
-    <View style={{
-      flexDirection: 'row', backgroundColor: colors.bg,
-      borderBottomWidth: 1, borderBottomColor: colors.border,
-    }}>
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      style={{ backgroundColor: colors.card, borderBottomWidth: 1, borderBottomColor: colors.border }}
+      contentContainerStyle={{ paddingHorizontal: spacing.sm }}
+    >
       {TABS.map((tab) => {
         const isActive = tab === active;
         return (
           <Pressable
             key={tab}
             onPress={() => onChange(tab)}
-            style={{ flex: 1, alignItems: 'center', paddingVertical: spacing.md }}
+            style={{ alignItems: 'center', paddingVertical: spacing.md, paddingHorizontal: spacing.lg, minWidth: 72 }}
           >
             <Text style={{
               color: isActive ? colors.accent : colors.textSecondary,
@@ -271,14 +311,14 @@ function TabBar({ active, onChange }: { active: Tab; onChange: (t: Tab) => void 
             </Text>
             {isActive && (
               <View style={{
-                position: 'absolute', bottom: 0, width: '60%',
+                position: 'absolute', bottom: 0, left: spacing.lg, right: spacing.lg,
                 height: 2, backgroundColor: colors.accent, borderRadius: 1,
               }} />
             )}
           </Pressable>
         );
       })}
-    </View>
+    </ScrollView>
   );
 }
 
@@ -426,6 +466,8 @@ function BatRow({
       borderBottomWidth: 1, borderBottomColor: colors.border + '25',
     }}>
       <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
+        {/* Player photo */}
+        <PlayerAvatar uri={row.imageUrl || smPlayerImage(row.id)} initial={cleanName.charAt(0)} size={32} />
         {/* Name cell */}
         <View style={{ flex: 1, paddingRight: 4 }}>
           <Text style={{ color: colors.textPrimary, fontSize: font.sm, fontWeight: '600' }} numberOfLines={1}>
@@ -487,6 +529,7 @@ function BowlRow({ row, index }: { row: BowlerRowType; index: number }) {
       paddingVertical: 8, paddingHorizontal: 2,
       borderBottomWidth: 1, borderBottomColor: colors.border + '25',
     }}>
+      <PlayerAvatar uri={row.imageUrl || smPlayerImage(row.id)} initial={row.name.charAt(0)} size={28} />
       <Text style={{ flex: 1, color: colors.textPrimary, fontSize: font.sm, fontWeight: '600' }} numberOfLines={1}>
         {row.name}
       </Text>
@@ -586,240 +629,191 @@ function LiveIntelCard({
 
   return (
     <View style={{
-      borderRadius: radius.lg, overflow: 'hidden',
+      borderRadius: radius.xl, overflow: 'hidden',
       marginBottom: spacing.md,
-      borderWidth: 1, borderColor: colors.live + '35',
+      borderWidth: 1, borderColor: colors.live + '40',
+      shadowColor: colors.live, shadowOpacity: 0.15, shadowRadius: 12, elevation: 6,
     }}>
-      {/* Top accent line */}
-      <View style={{ height: 2.5, backgroundColor: colors.live }} />
+      {/* Top accent */}
+      <View style={{ height: 3, backgroundColor: colors.live }} />
 
       {/* Header */}
       <View style={{
         flexDirection: 'row', alignItems: 'center', gap: 8,
-        backgroundColor: colors.live + '12',
-        paddingHorizontal: spacing.lg, paddingVertical: 10,
-        borderBottomWidth: 1, borderBottomColor: colors.live + '20',
+        backgroundColor: colors.live + '15',
+        paddingHorizontal: spacing.lg, paddingVertical: 11,
+        borderBottomWidth: 1, borderBottomColor: colors.live + '25',
       }}>
-        <View style={{ width: 7, height: 7, borderRadius: 3.5, backgroundColor: colors.live }} />
-        <Text style={{ color: colors.live, fontSize: font.xs, fontWeight: '800', letterSpacing: 1.2, flex: 1 }}>
-          LIVE INTELLIGENCE
+        <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: colors.live }} />
+        <Text style={{ color: colors.live, fontSize: font.xs, fontWeight: '900', letterSpacing: 1.4, flex: 1 }}>
+          LIVE NOW
         </Text>
-        <View style={{
-          backgroundColor: colors.live + '15', borderRadius: 12,
-          paddingHorizontal: 8, paddingVertical: 3,
-          borderWidth: 1, borderColor: colors.live + '30',
-        }}>
-          <Text style={{ color: colors.live, fontSize: 10, fontWeight: '700' }}>UPDATING</Text>
+        <View style={{ backgroundColor: '#ffffff12', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, borderColor: colors.live + '30' }}>
+          <Text style={{ color: colors.live, fontSize: 9, fontWeight: '800', letterSpacing: 0.5 }}>● UPDATING</Text>
         </View>
       </View>
 
-      <View style={{ backgroundColor: colors.card, paddingHorizontal: spacing.lg, paddingVertical: spacing.md }}>
+      <View style={{ backgroundColor: colors.card, padding: spacing.lg, gap: spacing.lg, borderTopWidth: 1, borderTopColor: colors.border }}>
 
-        {/* ── At the crease ── */}
-        <Text style={{
-          color: colors.textMuted, fontSize: 10, fontWeight: '700',
-          letterSpacing: 1.2, marginBottom: spacing.sm,
-        }}>
-          AT THE CREASE
-        </Text>
+        {/* ── BATTING section ── */}
+        <View>
+          <Text style={{ color: colors.textMuted, fontSize: 9, fontWeight: '800', letterSpacing: 1.5, marginBottom: spacing.sm }}>
+            🏏 AT THE CREASE
+          </Text>
+          <View style={{ gap: spacing.sm }}>
+            {notOut.map((b, i) => {
+              const pred     = findPrediction(b.name, predictions);
+              const clean    = b.name.replace(/\s*\(c\)/i, '').replace(/\s*\(wk\)/i, '').trim();
+              const isStrike = i === 0;
+              const sr       = b.balls > 0 ? ((b.runs / b.balls) * 100).toFixed(1) : '–';
+              const isAhead  = pred != null && b.runs > pred;
 
-        {notOut.map((b, i) => {
-          const pred    = findPrediction(b.name, predictions);
-          const clean   = b.name.replace(/\s*\(c\)/i, '').replace(/\s*\(wk\)/i, '').trim();
-          const badge   = (b.isCaptain ? ' (c)' : '') + (b.isKeeper ? ' †' : '');
-          const sr      = b.balls > 0 ? ((b.runs / b.balls) * 100).toFixed(1) : '–';
-          const isAhead = pred != null && b.runs > pred;
-          const diff    = pred != null ? b.runs - pred : null;
-          // Max bar scale: whichever is bigger of actual vs predicted, min 40
-          const scale   = Math.max(pred ?? 0, b.runs, 40);
-
-          return (
-            <View key={i} style={{
-              marginBottom: i < notOut.length - 1 ? 14 : 0,
-              paddingBottom: i < notOut.length - 1 ? 14 : 0,
-              borderBottomWidth: i < notOut.length - 1 ? 1 : 0,
-              borderBottomColor: colors.border + '50',
-            }}>
-              {/* Row: name left — score right */}
-              <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 10 }}>
-                <View style={{ flex: 1, paddingRight: 12 }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                    {/* On-strike dot: first not-out batter is typically on strike */}
-                    {i === 0 && (
-                      <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: colors.live }} />
-                    )}
-                    <Text style={{ color: '#FFFFFF', fontSize: font.md, fontWeight: '800' }} numberOfLines={1}>
-                      {clean}{badge}
-                    </Text>
-                  </View>
-                  <Text style={{ color: colors.textMuted, fontSize: 10 }}>
-                    {b.balls}b · SR {sr}
-                  </Text>
-                </View>
-
-                {/* Live score */}
-                <View style={{ alignItems: 'flex-end' }}>
-                  <Text style={{ color: colors.live, fontSize: 28, fontWeight: '900', lineHeight: 30, letterSpacing: -0.5 }}>
-                    {b.runs}*
-                  </Text>
-                  {/* Prediction badge next to score */}
-                  {pred != null ? (
-                    <View style={{
-                      flexDirection: 'row', alignItems: 'center', gap: 4,
-                      marginTop: 2,
-                    }}>
-                      <Text style={{ color: colors.textMuted, fontSize: 9 }}>pred</Text>
-                      <View style={{
-                        backgroundColor: isAhead ? colors.success + '20' : colors.accent + '18',
-                        borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2,
-                        borderWidth: 1,
-                        borderColor: isAhead ? colors.success + '40' : colors.accent + '35',
-                      }}>
-                        <Text style={{
-                          color: isAhead ? colors.success : colors.accent,
-                          fontSize: 11, fontWeight: '800',
-                        }}>
-                          {pred}
-                        </Text>
-                      </View>
-                      {diff !== null && (
-                        <Text style={{
-                          color: isAhead ? colors.success : '#f87171',
-                          fontSize: 10, fontWeight: '700',
-                        }}>
-                          {isAhead ? `+${diff}` : `${diff}`}
-                        </Text>
-                      )}
-                    </View>
-                  ) : (
-                    <Text style={{ color: colors.textMuted + '60', fontSize: 9, marginTop: 2 }}>
-                      no pred
-                    </Text>
-                  )}
-                </View>
-              </View>
-
-              {/* Dual prediction bar — only when pred available */}
-              {pred != null && (
-                <View>
-                  {/* Labels */}
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
-                    <Text style={{ color: colors.textMuted, fontSize: 9, fontWeight: '600' }}>
-                      Live {b.runs} runs
-                    </Text>
-                    <Text style={{ color: colors.textMuted, fontSize: 9, fontWeight: '600' }}>
-                      Predicted {pred} runs
-                    </Text>
-                  </View>
-                  {/* Bar track */}
-                  <View style={{ height: 5, backgroundColor: colors.cardElevated, borderRadius: 3, overflow: 'hidden', position: 'relative' }}>
-                    {/* Predicted target ghost */}
-                    <View style={{
-                      position: 'absolute', left: 0, top: 0, bottom: 0,
-                      width: `${Math.min((pred / scale) * 100, 100)}%`,
-                      backgroundColor: colors.accent + '40',
-                      borderRadius: 3,
-                    }} />
-                    {/* Actual progress */}
-                    <View style={{
-                      position: 'absolute', left: 0, top: 0, bottom: 0,
-                      width: `${Math.min((b.runs / scale) * 100, 100)}%`,
-                      backgroundColor: isAhead ? colors.success : colors.live,
-                      borderRadius: 3,
-                    }} />
-                  </View>
-                </View>
-              )}
-            </View>
-          );
-        })}
-
-        {/* ── Current bowlers ── */}
-        {activeBowlers.length > 0 && (
-          <>
-            <View style={{ height: 1, backgroundColor: colors.border, marginVertical: spacing.md }} />
-            <Text style={{
-              color: colors.textMuted, fontSize: 10, fontWeight: '700',
-              letterSpacing: 1.2, marginBottom: spacing.sm,
-            }}>
-              BOWLING
-            </Text>
-            {activeBowlers.map((bwl, i) => {
-              // Detect mid-over bowler: overs has a decimal part > 0
-              const isMidOver = (bwl.overs % 1) > 0;
               return (
                 <View key={i} style={{
-                  flexDirection: 'row', alignItems: 'center',
-                  marginBottom: i < activeBowlers.length - 1 ? spacing.sm : 0,
+                  borderRadius: radius.md,
+                  backgroundColor: isStrike ? colors.live + '12' : colors.cardElevated,
+                  borderWidth: 1,
+                  borderColor: isStrike ? colors.live + '40' : colors.border,
+                  padding: spacing.md,
                 }}>
-                  <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    {isMidOver && (
-                      <View style={{ width: 5, height: 5, borderRadius: 2.5, backgroundColor: colors.live }} />
-                    )}
-                    <Text style={{
-                      color: isMidOver ? '#fff' : colors.textSecondary,
-                      fontSize: font.sm,
-                      fontWeight: isMidOver ? '700' : '400',
-                    }} numberOfLines={1}>
-                      {bwl.name}
+                  {/* Name row */}
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
+                      {isStrike && <View style={{ width: 7, height: 7, borderRadius: 3.5, backgroundColor: colors.live }} />}
+                      <Text style={{ color: isStrike ? colors.textPrimary : colors.textSecondary, fontSize: font.sm, fontWeight: '800' }} numberOfLines={1}>
+                        {clean}
+                        {b.isCaptain ? ' (c)' : ''}{b.isKeeper ? ' †' : ''}
+                      </Text>
+                      {isStrike && (
+                        <View style={{ backgroundColor: colors.live + '25', borderRadius: 6, paddingHorizontal: 5, paddingVertical: 1 }}>
+                          <Text style={{ color: colors.live, fontSize: 8, fontWeight: '800' }}>STRIKE</Text>
+                        </View>
+                      )}
+                    </View>
+                    {/* Score */}
+                    <Text style={{ color: isStrike ? colors.live : colors.textPrimary, fontSize: isStrike ? 28 : 22, fontWeight: '900', letterSpacing: -0.5 }}>
+                      {b.runs}{b.isNotOut ? '*' : ''}
                     </Text>
                   </View>
-                  <View style={{ flexDirection: 'row', gap: spacing.md, alignItems: 'center' }}>
-                    <Text style={{ color: colors.textMuted, fontSize: font.xs, minWidth: 32 }}>
-                      {bwl.overs} ov
-                    </Text>
-                    <Text style={{
-                      color: bwl.wickets > 0 ? colors.accent : colors.textSecondary,
-                      fontSize: font.sm, fontWeight: bwl.wickets > 0 ? '700' : '400', minWidth: 36,
-                    }}>
-                      {bwl.wickets}/{bwl.runs}
-                    </Text>
-                    <Text style={{ color: colors.textMuted, fontSize: font.xs, minWidth: 42, textAlign: 'right' }}>
-                      Eco {bwl.economy > 0 ? bwl.economy.toFixed(1) : '–'}
-                    </Text>
+
+                  {/* Stats row */}
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
+                    <Text style={{ color: colors.textMuted, fontSize: 10 }}>{b.balls}b</Text>
+                    <View style={{ width: 1, height: 10, backgroundColor: colors.border }} />
+                    {(b as any).fours != null && <Text style={{ color: colors.textMuted, fontSize: 10 }}>{(b as any).fours}×<Text style={{ color: '#60a5fa' }}>4</Text></Text>}
+                    {(b as any).sixes != null && <Text style={{ color: colors.textMuted, fontSize: 10 }}>{(b as any).sixes}×<Text style={{ color: '#a78bfa' }}>6</Text></Text>}
+                    <View style={{ width: 1, height: 10, backgroundColor: colors.border }} />
+                    <Text style={{ color: colors.textMuted, fontSize: 10 }}>SR <Text style={{ color: colors.textSecondary, fontWeight: '700' }}>{sr}</Text></Text>
+
+                    {/* Prediction vs actual */}
+                    {pred != null && (
+                      <View style={{
+                        marginLeft: 'auto' as any,
+                        flexDirection: 'row', alignItems: 'center', gap: 4,
+                        backgroundColor: isAhead ? colors.success + '18' : colors.accent + '15',
+                        borderRadius: 8, paddingHorizontal: 6, paddingVertical: 2,
+                        borderWidth: 1, borderColor: isAhead ? colors.success + '35' : colors.accent + '30',
+                      }}>
+                        <Text style={{ color: colors.textMuted, fontSize: 8 }}>pred</Text>
+                        <Text style={{ color: isAhead ? colors.success : colors.accent, fontSize: 10, fontWeight: '800' }}>{pred}</Text>
+                        <Text style={{ color: isAhead ? colors.success : '#f87171', fontSize: 9, fontWeight: '700' }}>
+                          {isAhead ? `+${b.runs - pred}` : `${b.runs - pred}`}
+                        </Text>
+                      </View>
+                    )}
                   </View>
                 </View>
               );
             })}
-          </>
+          </View>
+        </View>
+
+        {/* ── BOWLING section ── */}
+        {activeBowlers.length > 0 && (
+          <View>
+            <Text style={{ color: colors.textMuted, fontSize: 9, fontWeight: '800', letterSpacing: 1.5, marginBottom: spacing.sm }}>
+              🎯 BOWLING
+            </Text>
+            {/* Header labels */}
+            <View style={{ flexDirection: 'row', paddingHorizontal: spacing.sm, marginBottom: 4 }}>
+              <Text style={{ flex: 1, color: colors.textMuted, fontSize: 9, fontWeight: '700' }}>BOWLER</Text>
+              <Text style={{ width: 36, color: colors.textMuted, fontSize: 9, fontWeight: '700', textAlign: 'center' }}>OV</Text>
+              <Text style={{ width: 44, color: colors.textMuted, fontSize: 9, fontWeight: '700', textAlign: 'center' }}>WKTS/R</Text>
+              <Text style={{ width: 44, color: colors.textMuted, fontSize: 9, fontWeight: '700', textAlign: 'right' }}>ECO</Text>
+            </View>
+            <View style={{ gap: 6 }}>
+              {activeBowlers.map((bwl, i) => {
+                const isBowling = (bwl.overs % 1) > 0;
+                const eco       = bwl.economy > 0 ? bwl.economy : 0;
+                const ecoColor  = eco < 7 ? colors.success : eco < 9 ? colors.accent : colors.live;
+                return (
+                  <View key={i} style={{
+                    flexDirection: 'row', alignItems: 'center',
+                    backgroundColor: isBowling ? colors.accentDim : 'transparent',
+                    borderRadius: radius.sm, paddingVertical: 7, paddingHorizontal: spacing.sm,
+                    borderWidth: isBowling ? 1 : 0, borderColor: colors.border,
+                  }}>
+                    <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      {isBowling
+                        ? <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: colors.live }} />
+                        : <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: 'transparent' }} />
+                      }
+                      <Text style={{ color: isBowling ? colors.accent : colors.textSecondary, fontSize: font.sm, fontWeight: isBowling ? '700' : '500' }} numberOfLines={1}>
+                        {bwl.name}
+                      </Text>
+                      {isBowling && (
+                        <View style={{ backgroundColor: colors.live + '20', borderRadius: 5, paddingHorizontal: 4, paddingVertical: 1 }}>
+                          <Text style={{ color: colors.live, fontSize: 8, fontWeight: '800' }}>NOW</Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text style={{ width: 36, color: colors.textSecondary, fontSize: font.sm, textAlign: 'center' }}>{bwl.overs}</Text>
+                    <Text style={{
+                      width: 44, textAlign: 'center',
+                      color: bwl.wickets > 0 ? colors.accent : colors.textSecondary,
+                      fontSize: font.sm, fontWeight: bwl.wickets > 0 ? '800' : '400',
+                    }}>
+                      {bwl.wickets}/{bwl.runs}
+                    </Text>
+                    <Text style={{ width: 44, color: ecoColor, fontSize: font.sm, fontWeight: '700', textAlign: 'right' }}>
+                      {eco > 0 ? eco.toFixed(1) : '–'}
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
+          </View>
         )}
 
-        {/* ── Live Win Probability ── */}
+        {/* ── WIN PROBABILITY ── */}
         {winProb && (
-          <>
-            <View style={{ height: 1, backgroundColor: colors.border, marginVertical: spacing.md }} />
-            <Text style={{
-              color: colors.textMuted, fontSize: 10, fontWeight: '700',
-              letterSpacing: 1.2, marginBottom: spacing.md, textAlign: 'center',
-            }}>
-              LIVE WIN PROBABILITY
+          <View>
+            <Text style={{ color: colors.textMuted, fontSize: 9, fontWeight: '800', letterSpacing: 1.5, marginBottom: spacing.md }}>
+              📊 WIN PROBABILITY
             </Text>
-
             {/* Team labels + percentages */}
             <View style={{ flexDirection: 'row', alignItems: 'flex-end', marginBottom: 8 }}>
               <View style={{ flex: 1 }}>
                 <Text style={{ color: defenderColor, fontSize: font.xs, fontWeight: '700' }}>{defenderName}</Text>
-                <Text style={{ color: defenderColor, fontSize: 22, fontWeight: '900' }}>{winProb.defenderPct}%</Text>
+                <Text style={{ color: defenderColor, fontSize: 24, fontWeight: '900', letterSpacing: -0.5 }}>{winProb.defenderPct}%</Text>
               </View>
               <View style={{ flex: 1, alignItems: 'flex-end' }}>
-                <Text style={{ color: chaserColor, fontSize: font.xs, fontWeight: '700', textAlign: 'right' }}>
-                  {winProb.chaserName}
-                </Text>
-                <Text style={{ color: chaserColor, fontSize: 22, fontWeight: '900' }}>{winProb.chaserPct}%</Text>
+                <Text style={{ color: chaserColor, fontSize: font.xs, fontWeight: '700', textAlign: 'right' }}>{winProb.chaserName}</Text>
+                <Text style={{ color: chaserColor, fontSize: 24, fontWeight: '900', textAlign: 'right', letterSpacing: -0.5 }}>{winProb.chaserPct}%</Text>
               </View>
             </View>
 
             {/* Probability bar */}
-            <View style={{ height: 8, borderRadius: 4, overflow: 'hidden', flexDirection: 'row' }}>
-              <View style={{ flex: winProb.defenderPct, backgroundColor: defenderColor + 'CC' }} />
-              <View style={{ flex: winProb.chaserPct,   backgroundColor: chaserColor   + 'CC' }} />
+            <View style={{ height: 10, borderRadius: 5, overflow: 'hidden', flexDirection: 'row' }}>
+              <View style={{ flex: winProb.defenderPct, backgroundColor: defenderColor }} />
+              <View style={{ flex: winProb.chaserPct,   backgroundColor: chaserColor   }} />
             </View>
-
-            <Text style={{ color: colors.textMuted, fontSize: 10, textAlign: 'center', marginTop: 6 }}>
+            <Text style={{ color: colors.textMuted, fontSize: 9, textAlign: 'center', marginTop: 5 }}>
               Based on CRR · RRR · wickets in hand
             </Text>
-          </>
+          </View>
         )}
+
       </View>
     </View>
   );
@@ -863,7 +857,7 @@ function CricbuzzInningsTable({
         borderBottomWidth: 1, borderBottomColor: colors.border,
         flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
       }}>
-        <Text style={{ color: '#fff', fontSize: font.sm, fontWeight: '800' }}>{inning.inning}</Text>
+        <Text style={{ color: colors.textPrimary, fontSize: font.sm, fontWeight: '800' }}>{inning.inning}</Text>
         {totalStr ? (
           <Text style={{ color: colors.accent, fontSize: font.sm, fontWeight: '700' }}>{totalStr}</Text>
         ) : null}
@@ -1028,6 +1022,253 @@ function MatchSummaryCard({ raw }: { raw: RawFull }) {
   );
 }
 
+// ── Playing XI tab ────────────────────────────────────────────
+
+const ROLE_COLORS: Record<string, string> = {
+  'BAT':    '#60a5fa',
+  'WK-BAT': '#34d399',
+  'WK':     '#34d399',
+  'ALL':    '#f59e0b',
+  'BOL':    '#f87171',
+};
+
+function LineupTab({
+  players, team1Short, team2Short,
+}: {
+  players:    { team1XI: LineupPlayer[]; team2XI: LineupPlayer[] };
+  team1Short: string;
+  team2Short: string;
+}) {
+  const [selectedTeam, setSelectedTeam] = useState<'team1' | 'team2'>('team1');
+  const t1Color = getTeamColor(team1Short);
+  const t2Color = getTeamColor(team2Short);
+  const xi      = selectedTeam === 'team1' ? players.team1XI : players.team2XI;
+  const hasXI   = players.team1XI.length > 0 || players.team2XI.length > 0;
+
+  if (!hasXI) {
+    return (
+      <View style={{ alignItems: 'center', paddingVertical: 60, paddingHorizontal: spacing.xl }}>
+        <Ionicons name="people-outline" size={48} color={colors.textMuted} />
+        <Text style={{ color: colors.textPrimary, fontSize: font.base, fontWeight: '700', marginTop: spacing.lg, textAlign: 'center' }}>
+          Playing XI not yet announced
+        </Text>
+        <Text style={{ color: colors.textMuted, fontSize: font.sm, marginTop: spacing.sm, textAlign: 'center', lineHeight: 20 }}>
+          Line-ups are confirmed at toss,{'\n'}usually 45 minutes before the match
+        </Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={{ padding: spacing.lg }}>
+      {/* Team selector */}
+      <View style={{
+        flexDirection: 'row', marginBottom: spacing.lg,
+        backgroundColor: colors.cardElevated, borderRadius: radius.md,
+        padding: 4, borderWidth: 1, borderColor: colors.border,
+      }}>
+        {(['team1', 'team2'] as const).map((key) => {
+          const isActive = selectedTeam === key;
+          const name     = key === 'team1' ? team1Short : team2Short;
+          const color    = key === 'team1' ? t1Color : t2Color;
+          return (
+            <Pressable
+              key={key}
+              onPress={() => setSelectedTeam(key)}
+              style={{
+                flex: 1, alignItems: 'center', paddingVertical: spacing.sm, borderRadius: radius.sm,
+                backgroundColor: isActive ? color + '25' : 'transparent',
+                borderWidth: isActive ? 1 : 0, borderColor: color + '60',
+              }}
+            >
+              <Text style={{ color: isActive ? color : colors.textMuted, fontSize: font.sm, fontWeight: '700' }}>
+                {name}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      <View style={{ backgroundColor: colors.card, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, overflow: 'hidden' }}>
+        {xi.length === 0 ? (
+          <View style={{ padding: spacing.xl, alignItems: 'center' }}>
+            <Text style={{ color: colors.textMuted, fontSize: font.sm }}>No lineup data</Text>
+          </View>
+        ) : xi.map((p, i) => {
+          const roleColor = ROLE_COLORS[p.role] ?? colors.textMuted;
+          return (
+            <View
+              key={p.id}
+              style={{
+                flexDirection: 'row', alignItems: 'center',
+                paddingHorizontal: spacing.lg, paddingVertical: 11,
+                borderBottomWidth: i < xi.length - 1 ? 1 : 0,
+                borderBottomColor: colors.borderLight,
+                backgroundColor: i % 2 === 1 ? colors.borderLight : colors.card,
+              }}
+            >
+              <Text style={{ width: 24, color: colors.textMuted, fontSize: font.xs, fontWeight: '600' }}>
+                {i + 1}
+              </Text>
+              <Text style={{ flex: 1, color: colors.textPrimary, fontSize: font.base, fontWeight: '500' }} numberOfLines={1}>
+                {p.name}
+              </Text>
+              <View style={{ backgroundColor: roleColor + '18', borderRadius: 4, paddingHorizontal: 7, paddingVertical: 3, borderWidth: 1, borderColor: roleColor + '40' }}>
+                <Text style={{ color: roleColor, fontSize: font.xs, fontWeight: '700' }}>{p.role}</Text>
+              </View>
+            </View>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
+// ── Commentary tab (ball-by-ball) ─────────────────────────────
+
+function DeliveryDot({ delivery }: { delivery: Delivery }) {
+  // Force type safety — backend might return unexpected types
+  const runs      = Number(delivery.runs)     || 0;
+  const isWicket  = delivery.isWicket === true;
+  const isSix     = delivery.six      === true;
+  const isFour    = delivery.four     === true;
+
+  const color = isWicket ? colors.live
+    : isSix    ? colors.success
+    : isFour   ? colors.accent
+    : runs > 0 ? colors.textPrimary
+    : colors.textMuted;
+
+  const label = isWicket ? 'W' : isSix ? '6' : isFour ? '4' : String(runs);
+
+  return (
+    <View
+      style={{
+        width: 22, height: 22, borderRadius: 11,
+        backgroundColor: color + '18',
+        alignItems: 'center', justifyContent: 'center',
+        borderWidth: 1, borderColor: color + '40',
+      }}
+    >
+      <Text style={{ color, fontSize: 9, fontWeight: '800' }}>{label}</Text>
+    </View>
+  );
+}
+
+function OverCard({ over, isExpanded, onToggle }: { over: Over; isExpanded: boolean; onToggle: () => void }) {
+  // Guard: ensure balls is always an array
+  const balls = Array.isArray(over?.balls) ? over.balls : [];
+  const overRuns = typeof over?.overRuns === 'number' ? over.overRuns : 0;
+  const wickets  = typeof over?.wickets  === 'number' ? over.wickets  : 0;
+  const overNum  = typeof over?.overNumber === 'number' ? over.overNumber : 0;
+
+  return (
+    <View style={{ marginBottom: spacing.sm }}>
+      {/* Over header */}
+      <Pressable
+        onPress={onToggle}
+        style={{
+          flexDirection: 'row', alignItems: 'center',
+          backgroundColor: colors.card, padding: spacing.md,
+          borderTopLeftRadius:     radius.md,
+          borderTopRightRadius:    radius.md,
+          borderBottomLeftRadius:  isExpanded ? 0 : radius.md,
+          borderBottomRightRadius: isExpanded ? 0 : radius.md,
+          borderWidth: 1, borderColor: colors.border,
+          borderBottomWidth: isExpanded ? 0 : 1,
+        }}
+      >
+        <Text style={{ color: colors.textMuted, fontSize: font.xs, fontWeight: '700', width: 48 }}>
+          Over {overNum + 1}
+        </Text>
+        <View style={{ flexDirection: 'row', gap: 3, flex: 1, flexWrap: 'wrap' }}>
+          {balls.slice(0, 8).map((b, i) => <DeliveryDot key={i} delivery={b} />)}
+        </View>
+        <View style={{ alignItems: 'flex-end', gap: 2 }}>
+          <Text style={{ color: colors.textPrimary, fontSize: font.sm, fontWeight: '700' }}>
+            {overRuns} runs
+          </Text>
+          {wickets > 0 && (
+            <Text style={{ color: colors.live, fontSize: font.xs, fontWeight: '700' }}>
+              {wickets}W
+            </Text>
+          )}
+        </View>
+        <Ionicons name={isExpanded ? 'chevron-up' : 'chevron-down'} size={14} color={colors.textMuted} style={{ marginLeft: spacing.sm }} />
+      </Pressable>
+
+      {/* Ball-by-ball detail */}
+      {isExpanded && (
+        <View style={{ backgroundColor: colors.card, borderWidth: 1, borderTopWidth: 0, borderColor: colors.border, borderBottomLeftRadius: radius.md, borderBottomRightRadius: radius.md }}>
+          {balls.map((b, i) => {
+            const bRuns    = Number(b?.runs)     || 0;
+            const bWicket  = b?.isWicket === true;
+            const comment  = typeof b?.commentary === 'string' && b.commentary
+              ? b.commentary
+              : bWicket ? 'Wicket!' : `${bRuns} run${bRuns !== 1 ? 's' : ''}`;
+
+            return (
+              <View
+                key={i}
+                style={{
+                  flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md,
+                  paddingHorizontal: spacing.lg, paddingVertical: spacing.sm,
+                  borderTopWidth: i > 0 ? 1 : 0, borderTopColor: colors.borderLight,
+                }}
+              >
+                <Text style={{ color: colors.textMuted, fontSize: font.xs, width: 36, paddingTop: 2 }}>
+                  {overNum + 1}.{i + 1}
+                </Text>
+                {b ? <DeliveryDot delivery={b} /> : null}
+                <Text style={{ flex: 1, color: colors.textSecondary, fontSize: font.sm, lineHeight: 20 }}>
+                  {comment}
+                </Text>
+              </View>
+            );
+          })}
+        </View>
+      )}
+    </View>
+  );
+}
+
+function CommentaryTab({ overs, isLive }: { overs: Over[]; isLive: boolean }) {
+  const lastOver  = overs.length > 0 ? overs[overs.length - 1] : null;
+  const [expandedOver, setExpandedOver] = useState<number | null>(
+    lastOver?.overNumber ?? null,
+  );
+
+  if (overs.length === 0) {
+    return (
+      <View style={{ alignItems: 'center', paddingVertical: 60, paddingHorizontal: spacing.xl }}>
+        <Ionicons name="mic-outline" size={48} color={colors.textMuted} />
+        <Text style={{ color: colors.textPrimary, fontSize: font.base, fontWeight: '700', marginTop: spacing.lg, textAlign: 'center' }}>
+          {isLive ? 'Commentary loading…' : 'No commentary available'}
+        </Text>
+        <Text style={{ color: colors.textMuted, fontSize: font.sm, marginTop: spacing.sm, textAlign: 'center', lineHeight: 20 }}>
+          {isLive ? 'Ball-by-ball data will appear here shortly' : 'Commentary is available for live and recent matches'}
+        </Text>
+      </View>
+    );
+  }
+
+  // Show newest over first
+  const reversed = [...overs].reverse();
+
+  return (
+    <View style={{ padding: spacing.lg }}>
+      {reversed.map(over => (
+        <OverCard
+          key={over.overNumber}
+          over={over}
+          isExpanded={expandedOver === over.overNumber}
+          onToggle={() => setExpandedOver(prev => prev === over.overNumber ? null : over.overNumber)}
+        />
+      ))}
+    </View>
+  );
+}
+
 // ── Overview tab ──────────────────────────────────────────────
 
 function InfoRow({ label, value, valueColor }: { label: string; value: string; valueColor?: string }) {
@@ -1069,25 +1310,53 @@ function SectionCard({ title, children }: { title: string; children: React.React
 }
 
 function OverviewTab({ raw }: { raw: RawFull }) {
-  const toss   = raw.toss;
-  const stage  = raw.matchStage && raw.matchStage !== 'LEAGUE' ? raw.matchStage : '';
-  const series = raw.seriesName ?? raw.series ?? '';
+  const toss       = raw.toss;
+  const stage      = raw.matchStage && raw.matchStage !== 'LEAGUE' ? raw.matchStage : '';
+  const series     = raw.seriesName ?? raw.series ?? '';
   const statusText = raw.statusText ?? '';
   const tossLine   = toss?.winner ? `${toss.winner} won and chose to ${toss.decision || 'bat'}` : '';
+  const officials  = raw.officials;
+  const motm       = raw.manOfMatch;
 
   return (
     <View style={{ padding: spacing.lg }}>
+      {/* Man of the match */}
+      {motm?.name && (
+        <View
+          style={{
+            backgroundColor: colors.card, borderRadius: radius.md,
+            borderWidth: 1, borderColor: '#FDE68A',
+            padding: spacing.lg, marginBottom: spacing.md,
+            flexDirection: 'row', alignItems: 'center', gap: spacing.md,
+          }}
+        >
+          <View style={{ width: 3, height: 40, backgroundColor: '#F59E0B', borderRadius: 2 }} />
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: colors.textMuted, fontSize: font.xs, fontWeight: '600', letterSpacing: 0.8, marginBottom: 4 }}>
+              MAN OF THE MATCH
+            </Text>
+            <Text style={{ color: colors.textPrimary, fontSize: font.base, fontWeight: '800' }}>
+              {motm.name}
+            </Text>
+            <Text style={{ color: colors.textSecondary, fontSize: font.xs, marginTop: 2 }}>{motm.role}</Text>
+          </View>
+          <Ionicons name="trophy" size={24} color="#F59E0B" />
+        </View>
+      )}
+
       <SectionCard title="MATCH INFO">
         <InfoRow label="Series"  value={series} />
         <InfoRow label="Format"  value={raw.matchType ? raw.matchType.toUpperCase() : 'T20'} />
         <InfoRow label="Stage"   value={stage} valueColor={colors.accent} />
         <InfoRow label="Match"   value={raw.matchDesc ?? ''} />
       </SectionCard>
+
       <SectionCard title="VENUE & SCHEDULE">
         <InfoRow label="Venue" value={raw.venue ?? ''} />
         <InfoRow label="Date"  value={raw.date ? formatMatchDate(raw.date) : ''} />
         <InfoRow label="Time"  value={raw.time ?? ''} />
       </SectionCard>
+
       <SectionCard title="MATCH DETAILS">
         <InfoRow label="Toss"   value={tossLine} />
         <InfoRow label="Status" value={statusText} />
@@ -1095,6 +1364,15 @@ function OverviewTab({ raw }: { raw: RawFull }) {
           <InfoRow label="Result" value={statusText} valueColor={colors.success} />
         )}
       </SectionCard>
+
+      {/* Officials */}
+      {(officials?.umpire1 || officials?.umpire2 || officials?.tvUmpire) && (
+        <SectionCard title="OFFICIALS">
+          {officials.umpire1 && <InfoRow label="Umpire 1" value={officials.umpire1} />}
+          {officials.umpire2 && <InfoRow label="Umpire 2" value={officials.umpire2} />}
+          {officials.tvUmpire && <InfoRow label="TV Umpire" value={officials.tvUmpire} />}
+        </SectionCard>
+      )}
     </View>
   );
 }
@@ -1106,10 +1384,11 @@ function PlayerPredictionRow({
   prediction,
   index,
 }: {
-  player:     { name: string; role: string };
+  player:     { id?: string; name: string; role: string };
   prediction: PlayerPrediction | undefined;
   index:      number;
 }) {
+  const router = useRouter();
   const roleColors: Record<string, string> = {
     'BAT':    '#60a5fa',
     'WK-BAT': '#34d399',
@@ -1120,13 +1399,14 @@ function PlayerPredictionRow({
   const roleColor = roleColors[player.role] ?? colors.textMuted;
 
   return (
-    <View style={{
-      flexDirection: 'row', alignItems: 'center',
-      paddingVertical: spacing.sm,
-      borderBottomWidth: index > 0 ? 0 : 0,
-      backgroundColor: index % 2 === 0 ? 'transparent' : colors.cardElevated + '30',
-      borderRadius: 4, paddingHorizontal: spacing.xs,
-    }}>
+    <Pressable
+      onPress={() => player.id && router.push(`/(player)/${player.id}` as any)}
+      style={{
+        flexDirection: 'row', alignItems: 'center',
+        paddingVertical: spacing.sm,
+        backgroundColor: index % 2 === 0 ? 'transparent' : colors.cardElevated + '30',
+        borderRadius: 4, paddingHorizontal: spacing.xs,
+      }}>
       <View style={{
         width: 24, height: 24, borderRadius: 12,
         backgroundColor: roleColor + '20', alignItems: 'center', justifyContent: 'center',
@@ -1149,7 +1429,7 @@ function PlayerPredictionRow({
       ) : (
         <Text style={{ color: colors.textMuted, fontSize: font.xs }}>—</Text>
       )}
-    </View>
+    </Pressable>
   );
 }
 
@@ -1234,7 +1514,7 @@ function SquadWithPredictions({
         }}>
           <Ionicons name="bulb-outline" size={14} color={colors.accent} />
           <Text style={{ color: colors.accent, fontSize: font.xs, fontWeight: '600' }}>
-            CricketIQ predicted runs for this match
+            PredictX predicted runs for this match
           </Text>
         </View>
       )}
@@ -1330,15 +1610,15 @@ function ErrorState({ onRetry }: { onRetry: () => void }) {
           paddingHorizontal: spacing.xxxl, paddingVertical: spacing.md,
         })}
       >
-        <Text style={{ color: '#fff', fontSize: font.base, fontWeight: '700' }}>Retry</Text>
+        <Text style={{ color: '#FFFFFF', fontSize: font.base, fontWeight: '700' }}>Retry</Text>
       </Pressable>
     </View>
   );
 }
 
-// ── Main screen ───────────────────────────────────────────────
+// ── Cricket match detail screen ───────────────────────────────
 
-export default function MatchDetailScreen() {
+function CricketMatchDetailScreen() {
   const { id }  = useLocalSearchParams<{ id: string }>();
   const router  = useRouter();
   // Default to Squad tab for upcoming matches (no scorecard available yet)
@@ -1351,7 +1631,17 @@ export default function MatchDetailScreen() {
     data: match, isLoading, isError, isRefetching, refetch,
   } = useFullMatch(id ?? '');
 
-  const { data: predictions } = usePredictions(id ?? '');
+  const isLiveMatch = match?.status === 'live';
+
+  const { data: predictions }          = usePredictions(id ?? '');
+  const { data: tips = [] }            = useTipsList();
+  const { data: lineupData }           = useLineup(id ?? '');
+  const { data: oversData }            = useOvers(id ?? '', isLiveMatch);
+  const { data: expertPredictions = [] } = useQuery<{ id: string; match_id: string | null; predicted_winner: string; confidence: string; analysis: string }[]>({
+    queryKey: ['expert-predictions'],
+    queryFn:  async () => { const r = await api.get<{ predictions: any[] }>('/expert-predictions'); return r.predictions ?? []; },
+    staleTime: 0, refetchOnMount: true,
+  });
 
   const BackButton = (
     <View style={{
@@ -1545,11 +1835,11 @@ export default function MatchDetailScreen() {
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.md }}>
                       <Ionicons name="bulb" size={16} color={colors.accent} />
                       <Text style={{ color: colors.accent, fontSize: font.sm, fontWeight: '800' }}>
-                        CricketIQ Pre-Match Predictions
+                        PredictX Pre-Match Predictions
                       </Text>
                     </View>
                     <Text style={{ color: colors.textMuted, fontSize: font.xs, marginBottom: spacing.md }}>
-                      Batting score predictions based on player roles and IPL averages
+                      Batting score predictions based on player roles and historical averages
                     </Text>
                     {[
                       { label: raw.team1?.shortName ?? 'T1', preds: predictions?.team1 ?? [] },
@@ -1586,6 +1876,42 @@ export default function MatchDetailScreen() {
         </View>
       )}
 
+      {/* ── Expert + PredictX (completed matches) ── */}
+      {activeTab === 'Scorecard' && raw.status === 'completed' && (() => {
+        const expertPick = expertPredictions.find(p => p.match_id && String(p.match_id) === String(id));
+        const aiPick     = tips.find(t => String(t.id) === String(id));
+        if (!expertPick && !aiPick) return null;
+        return (
+          <View style={{ paddingHorizontal: spacing.md, paddingBottom: spacing.lg }}>
+            <Text style={{ color: colors.textMuted, fontSize: 9, fontWeight: '800', letterSpacing: 1.5, marginBottom: spacing.sm }}>MATCH PREDICTIONS</Text>
+            <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+              {expertPick && (
+                <View style={{ flex: 1, backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.md, borderWidth: 1, borderColor: colors.border }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 6 }}>
+                    <Ionicons name="person-outline" size={10} color={colors.textSecondary} />
+                    <Text style={{ color: colors.textSecondary, fontSize: 9, fontWeight: '700', letterSpacing: 0.8 }}>EXPERT PICK</Text>
+                  </View>
+                  <Text style={{ color: colors.textPrimary, fontSize: font.sm, fontWeight: '800', marginBottom: 4 }}>{expertPick.predicted_winner}</Text>
+                  <Text style={{ color: colors.textMuted, fontSize: 9 }}>{expertPick.confidence} CONFIDENCE</Text>
+                  {expertPick.analysis ? (
+                    <Text style={{ color: colors.textSecondary, fontSize: 10, lineHeight: 15, marginTop: 6 }} numberOfLines={3}>{expertPick.analysis}</Text>
+                  ) : null}
+                </View>
+              )}
+              {aiPick?.tip?.winner && (
+                <View style={{ flex: 1, backgroundColor: colors.accentDim, borderRadius: radius.md, padding: spacing.md, borderWidth: 1, borderColor: colors.accent + '30' }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 6 }}>
+                    <Ionicons name="flash-outline" size={10} color={colors.accent} />
+                    <Text style={{ color: colors.accent, fontSize: 9, fontWeight: '700', letterSpacing: 0.8 }}>PREDICTX</Text>
+                  </View>
+                  <Text style={{ color: colors.accent, fontSize: font.sm, fontWeight: '800' }}>{aiPick.tip.winner}</Text>
+                </View>
+              )}
+            </View>
+          </View>
+        );
+      })()}
+
       {/* ── Overview ──────────────────────────────────── */}
       {activeTab === 'Overview' && <OverviewTab raw={raw} />}
 
@@ -1594,6 +1920,23 @@ export default function MatchDetailScreen() {
         <View style={{ padding: spacing.lg }}>
           <SquadWithPredictions raw={raw} predictions={predictions} />
         </View>
+      )}
+
+      {/* ── Playing XI ────────────────────────────────── */}
+      {activeTab === 'XI' && (
+        <LineupTab
+          players={lineupData ?? { team1XI: [], team2XI: [] }}
+          team1Short={raw.team1?.shortName ?? ''}
+          team2Short={raw.team2?.shortName ?? ''}
+        />
+      )}
+
+      {/* ── Commentary ────────────────────────────────── */}
+      {activeTab === 'Commentary' && (
+        <CommentaryTab
+          overs={oversData?.overs ?? []}
+          isLive={isLiveMatch}
+        />
       )}
     </View>
   );
@@ -1618,4 +1961,300 @@ export default function MatchDetailScreen() {
       </ScrollView>
     </SafeAreaView>
   );
+}
+
+// ── Football: Team crest (logo or flag fallback) ─────────────
+
+function FootballTeamCrest({ logo, flag, color, size }: { logo: string; flag: string; color: string; size: number }) {
+  if (logo) return <Image source={{ uri: logo }} style={{ width: size, height: size }} resizeMode="contain" />;
+  return (
+    <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: color + '20', alignItems: 'center', justifyContent: 'center' }}>
+      <Text style={{ fontSize: size * 0.4 }}>{flag}</Text>
+    </View>
+  );
+}
+
+// ── Football: Score header ────────────────────────────────────
+
+function FootballMatchHeader({ match }: { match: FootballMatch }) {
+  const t1 = match.homeTeam;
+  const t2 = match.awayTeam;
+  const isLive     = match.status === 'live';
+  const isUpcoming = match.status === 'upcoming';
+  const isDone     = match.status === 'completed';
+
+  const homeGoals = match.score.home;
+  const awayGoals = match.score.away;
+  const t1Wins = isDone && homeGoals !== null && awayGoals !== null && homeGoals > awayGoals;
+  const t2Wins = isDone && homeGoals !== null && awayGoals !== null && awayGoals > homeGoals;
+
+  const scoreText = (homeGoals !== null && awayGoals !== null) ? `${homeGoals} - ${awayGoals}` : '- vs -';
+  const htText = (match.score.htHome != null && match.score.htAway != null)
+    ? `HT ${match.score.htHome} - ${match.score.htAway}`
+    : null;
+
+  return (
+    <View>
+      <LinearGradient
+        colors={[t1.color + '25', colors.card, colors.card, t2.color + '25']}
+        start={{ x: 0, y: 0.5 }}
+        end={{ x: 1, y: 0.5 }}
+        style={{ paddingBottom: spacing.xxl }}
+      >
+        {/* Stage + group pill */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, paddingTop: spacing.sm, paddingBottom: spacing.lg }}>
+          <View style={{
+            backgroundColor: colors.accent + '20', borderRadius: 12,
+            paddingHorizontal: spacing.md, paddingVertical: 3,
+            borderWidth: 1, borderColor: colors.accent + '40',
+          }}>
+            <Text style={{ color: colors.accent, fontSize: font.xs, fontWeight: '800', letterSpacing: 1 }}>
+              ★ {match.stage}
+            </Text>
+          </View>
+          {match.group && (
+            <Text style={{ color: colors.textSecondary, fontSize: font.xs }}>Group {match.group}</Text>
+          )}
+        </View>
+
+        {/* Teams + score row */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.lg }}>
+          {/* Home team */}
+          <View style={{ flex: 1, alignItems: 'center' }}>
+            <View style={{
+              padding: t1Wins ? 4 : 2, borderRadius: 44,
+              borderWidth: t1Wins ? 2 : 0, borderColor: t1.color + '90',
+            }}>
+              <FootballTeamCrest logo={t1.logo} flag={t1.flag} color={t1.color} size={64} />
+            </View>
+            <Text style={{
+              color: t1Wins ? colors.textPrimary : colors.textSecondary,
+              fontSize: font.md, fontWeight: t1Wins ? '800' : '600',
+              marginTop: spacing.sm, textAlign: 'center',
+            }} numberOfLines={1}>
+              {t1.flag} {t1.shortName}
+            </Text>
+          </View>
+
+          {/* Center: score */}
+          <View style={{ alignItems: 'center', paddingHorizontal: spacing.md, minWidth: 84 }}>
+            {isLive && (
+              <View style={{
+                backgroundColor: colors.live + '20', borderRadius: 16,
+                paddingHorizontal: spacing.md, paddingVertical: spacing.xs,
+                borderWidth: 1, borderColor: colors.live + '50', marginBottom: spacing.sm,
+              }}>
+                <Text style={{ color: colors.live, fontSize: font.xs, fontWeight: '800', letterSpacing: 1 }}>
+                  ● {match.minute ? `${match.minute}'` : 'LIVE'}
+                </Text>
+              </View>
+            )}
+            <Text style={{
+              color: isUpcoming ? colors.textMuted : colors.textPrimary,
+              fontSize: isUpcoming ? font.lg : 32, fontWeight: '800', letterSpacing: 1,
+            }}>
+              {scoreText}
+            </Text>
+            {htText && (
+              <Text style={{ color: colors.textMuted, fontSize: font.xs, marginTop: 2 }}>{htText}</Text>
+            )}
+            {isUpcoming && (
+              <Text style={{ color: colors.textMuted + '60', fontSize: font.xxl, fontWeight: '900', marginTop: spacing.xs }}>VS</Text>
+            )}
+          </View>
+
+          {/* Away team */}
+          <View style={{ flex: 1, alignItems: 'center' }}>
+            <View style={{
+              padding: t2Wins ? 4 : 2, borderRadius: 44,
+              borderWidth: t2Wins ? 2 : 0, borderColor: t2.color + '90',
+            }}>
+              <FootballTeamCrest logo={t2.logo} flag={t2.flag} color={t2.color} size={64} />
+            </View>
+            <Text style={{
+              color: t2Wins ? colors.textPrimary : colors.textSecondary,
+              fontSize: font.md, fontWeight: t2Wins ? '800' : '600',
+              marginTop: spacing.sm, textAlign: 'center',
+            }} numberOfLines={1}>
+              {t2.flag} {t2.shortName}
+            </Text>
+          </View>
+        </View>
+
+        {/* Status strip */}
+        {match.statusText ? (
+          <View style={{
+            marginTop: spacing.xl, marginHorizontal: spacing.lg,
+            backgroundColor: isLive ? colors.live + '15' : colors.cardElevated,
+            borderRadius: radius.sm, paddingVertical: spacing.sm,
+            paddingHorizontal: spacing.md,
+            borderWidth: 1, borderColor: isLive ? colors.live + '30' : colors.border,
+          }}>
+            <Text style={{
+              color: isLive ? colors.live : colors.textSecondary,
+              fontSize: font.sm, fontWeight: isDone ? '700' : '500', textAlign: 'center',
+            }} numberOfLines={2}>
+              {match.statusText}
+            </Text>
+          </View>
+        ) : null}
+
+        {/* Venue + date */}
+        <View style={{
+          flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+          marginTop: spacing.md, gap: spacing.lg, flexWrap: 'wrap',
+        }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Ionicons name="location-outline" size={11} color={colors.textMuted} />
+            <Text style={{ color: colors.textMuted, fontSize: font.xs, marginLeft: 3 }} numberOfLines={1}>
+              {match.venue || match.city}
+            </Text>
+          </View>
+          {match.date ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Ionicons name="calendar-outline" size={11} color={colors.textMuted} />
+              <Text style={{ color: colors.textMuted, fontSize: font.xs, marginLeft: 3 }}>
+                {formatMatchDate(match.date)} • {match.time}
+              </Text>
+            </View>
+          ) : null}
+        </View>
+      </LinearGradient>
+      <View style={{ height: 1, backgroundColor: colors.border }} />
+    </View>
+  );
+}
+
+// ── Football: Embedded prediction preview ────────────────────
+
+function FootballPredictionPreview({ matchId, homeTeam, awayTeam }: {
+  matchId: string; homeTeam: { shortName: string }; awayTeam: { shortName: string };
+}) {
+  const router = useRouter();
+  const { data, isLoading } = useFootballMatchTip(matchId);
+
+  if (isLoading) {
+    return (
+      <View style={{ marginHorizontal: spacing.lg, marginTop: spacing.lg }}>
+        <SkeletonBlock height={120} r={radius.lg} />
+      </View>
+    );
+  }
+  if (!data) return null;
+  const { tip } = data;
+
+  return (
+    <Pressable onPress={() => router.push(`/(tip-detail)/${matchId}?sport=football` as any)}>
+      <View style={{
+        marginHorizontal: spacing.lg, marginTop: spacing.lg,
+        backgroundColor: colors.card, borderRadius: radius.lg,
+        borderWidth: 1, borderColor: colors.border, padding: spacing.lg,
+      }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+            <Ionicons name="sparkles" size={12} color={colors.accent} />
+            <Text style={{ color: colors.accent, fontSize: font.xs, fontWeight: '700', letterSpacing: 1 }}>PREDICTX</Text>
+          </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            <Text style={{ color: colors.textMuted, fontSize: font.xs, fontWeight: '600' }}>Full breakdown</Text>
+            <Ionicons name="chevron-forward" size={14} color={colors.textMuted} />
+          </View>
+        </View>
+        <FootballProbabilityBar
+          homeTeam={homeTeam.shortName}
+          awayTeam={awayTeam.shortName}
+          homeWin={tip.homeWin}
+          draw={tip.draw}
+          awayWin={tip.awayWin}
+          isKnockout={tip.isKnockout}
+        />
+      </View>
+    </Pressable>
+  );
+}
+
+// ── Football match detail screen ─────────────────────────────
+
+function FootballMatchDetailScreen() {
+  const { id }  = useLocalSearchParams<{ id: string }>();
+  const router  = useRouter();
+  const { data: match, isLoading, isError, isRefetching, refetch } = useFootballMatchDetail(id);
+
+  const BackButton = (
+    <View style={{
+      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+      paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, backgroundColor: colors.bg,
+    }}>
+      <Pressable
+        onPress={() => router.back()}
+        style={({ pressed }) => ({
+          opacity: pressed ? 0.7 : 1, flexDirection: 'row', alignItems: 'center', padding: spacing.xs,
+        })}
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+      >
+        <Ionicons name="chevron-back" size={22} color={colors.textPrimary} />
+        <Text style={{ color: colors.textPrimary, fontSize: font.md, fontWeight: '600', marginLeft: 2 }}>
+          Matches
+        </Text>
+      </Pressable>
+      {match?.status === 'live' && (
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          {isRefetching
+            ? <ActivityIndicator size="small" color={colors.live} />
+            : <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: colors.live }} />
+          }
+          <Text style={{ color: colors.live, fontSize: font.xs, fontWeight: '700', marginLeft: 6 }}>
+            LIVE
+          </Text>
+        </View>
+      )}
+    </View>
+  );
+
+  if (isLoading) {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }}>
+        {BackButton}
+        <MatchDetailSkeleton />
+      </SafeAreaView>
+    );
+  }
+
+  if (isError || !match) {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }}>
+        {BackButton}
+        <ErrorState onRetry={() => refetch()} />
+      </SafeAreaView>
+    );
+  }
+
+  return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }}>
+      {BackButton}
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 80 }}>
+        <FootballMatchHeader match={match} />
+
+        <FootballPredictionPreview matchId={match.id} homeTeam={match.homeTeam} awayTeam={match.awayTeam} />
+
+        <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.lg }}>
+          <SectionCard title="MATCH INFO">
+            <InfoRow label="Stage"   value={match.stage} />
+            {match.group && <InfoRow label="Group" value={`Group ${match.group}`} />}
+            <InfoRow label="Date"    value={formatMatchDate(match.date)} />
+            <InfoRow label="Kickoff" value={match.time} />
+            <InfoRow label="Venue"   value={match.venue || '—'} />
+            {match.city ? <InfoRow label="City" value={match.city} /> : null}
+          </SectionCard>
+        </View>
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+// ── Main screen ───────────────────────────────────────────────
+
+export default function MatchDetailScreen() {
+  const isFootball = useIsFootball();
+  return isFootball ? <FootballMatchDetailScreen /> : <CricketMatchDetailScreen />;
 }

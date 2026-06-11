@@ -1,33 +1,27 @@
 /**
- * useMatches.ts — React Query hooks for all match data.
+ * useMatches.ts — React Query hooks for match data, league-aware.
+ *
+ * All hooks read the selected league from LeagueContext and
+ * automatically re-fetch when the user switches leagues.
  *
  * Hooks:
- *   useMatchCategories()      — live / upcoming / completed; auto-polls when live
- *   useIPLFixtures()          — full season schedule (6 h TTL)
+ *   useMatchCategories()      — live / upcoming / completed for selected league
+ *   useLeagueFixtures()       — full season schedule (6 h TTL)
  *   useUpcomingWithFixtures() — merged upcoming (deduped)
- *   useMatches()              — flat Match[] across all categories
- *   useFullMatch(id)          — single match, polls 30 s when live
+ *   useLeagueTable()          — points table for selected league
+ *   useFullMatch(id)          — single match detail, polls 30 s when live
  *   useCachedMatch(id)        — synchronous cache lookup (no network)
- *
- * Double-call prevention:
- *   - All three list hooks share query key 'ipl:matches' — React Query
- *     fires exactly one network request regardless of how many components
- *     subscribe.
- *   - matchService.getIPLMatches stores the in-flight Promise so concurrent
- *     calls outside React Query also deduplicate.
- *   - refetch() is guarded by an isRefetching ref so rapid pull-to-refresh
- *     taps don't fire multiple invalidations.
  */
 
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import { useRef, useCallback } from 'react';
 import {
-  getIPLMatches,
-  getIPLFixtures,
-  getIPLTable,
+  getLeagueMatches,
+  getLeagueFixtures,
+  getLeagueTable,
   getMatchFull,
   getMatchFromCache,
-  invalidateCache,
+  invalidateLeagueCache,
   type MatchData,
   type FullMatch,
   type StandingsRow,
@@ -38,47 +32,43 @@ import {
   type AdaptedMatch,
 } from '@/utils/matchAdapter';
 import type { Match } from '@/types/match';
+import { useLeague } from '@/contexts/LeagueContext';
 
 // ── useMatchCategories ────────────────────────────────────────
 //
 // Primary hook for the Matches screen.
-//
-// Auto-refresh rules:
-//   • live matches present  → refetch every 30 s
-//   • no live matches       → no background polling
-//
-// refetch() is guarded: if a refetch is already in-flight, the call is
-// a no-op so rapid pull-to-refresh taps don't fire duplicate requests.
+// Query key includes the league slug so switching league triggers a new fetch.
 
 export function useMatchCategories() {
-  const query            = useQuery<MatchData>({
-    queryKey:             ['ipl:matches'],
-    queryFn:              () => getIPLMatches(false),
+  const { league } = useLeague();
+  const slug = league.id;
+
+  const query = useQuery<MatchData>({
+    queryKey:             [`${slug}:matches`],
+    queryFn:              () => getLeagueMatches(slug, false),
     staleTime:            30_000,
     refetchOnMount:       true,
     refetchOnWindowFocus: false,
-    // Only one retry — on AbortError matchService already retries internally
     retry:                0,
     placeholderData:      (prev) => prev,
     refetchInterval:      (q) => {
       const live = q.state.data?.live ?? [];
-      return live.length > 0 ? 30_000 : false;
+      return live.length > 0 ? 30_000 : 120_000;
     },
   });
 
-  // Guard: prevent firing invalidateCache + refetch while already refetching
   const isRefetchingRef = useRef(false);
 
   const refetch = useCallback(async () => {
     if (isRefetchingRef.current) return;
     isRefetchingRef.current = true;
     try {
-      invalidateCache();
+      invalidateLeagueCache(slug);
       await query.refetch();
     } finally {
       isRefetchingRef.current = false;
     }
-  }, [query]);
+  }, [query, slug]);
 
   return {
     liveMatches:      adaptMatches(query.data?.live      ?? []),
@@ -91,15 +81,15 @@ export function useMatchCategories() {
   };
 }
 
-// ── useIPLFixtures ────────────────────────────────────────────
-//
-// Full IPL season schedule from GET /api/ipl/fixtures.
-// 6-hour stale time — fixtures rarely change.
+// ── useLeagueFixtures ─────────────────────────────────────────
 
-export function useIPLFixtures() {
+export function useLeagueFixtures() {
+  const { league } = useLeague();
+  const slug = league.id;
+
   return useQuery<AdaptedMatch[]>({
-    queryKey:             ['ipl:fixtures'],
-    queryFn:              async () => adaptMatches(await getIPLFixtures()),
+    queryKey:             [`${slug}:fixtures`],
+    queryFn:              async () => adaptMatches(await getLeagueFixtures(slug)),
     staleTime:            6 * 60 * 60_000,
     refetchOnMount:       false,
     refetchOnWindowFocus: false,
@@ -108,56 +98,57 @@ export function useIPLFixtures() {
   });
 }
 
+// Keep old name as alias so existing imports don't break
+export { useLeagueFixtures as useIPLFixtures };
+
 // ── useUpcomingWithFixtures ───────────────────────────────────
-//
-// Combines matches.upcoming (real-time) with fixtures (full schedule),
-// deduped by id.  Ensures upcoming fixtures appear even before they
-// enter the currentMatches window.
 
 export function useUpcomingWithFixtures(): {
-  upcoming:     AdaptedMatch[];
-  isLoading:    boolean;
-  isError:      boolean;
+  upcoming:  AdaptedMatch[];
+  isLoading: boolean;
+  isError:   boolean;
 } {
-  const {
-    upcomingMatches,
-    isLoading: loadingMatches,
-    isError:   errorMatches,
-  } = useMatchCategories();
+  const { upcomingMatches, isLoading: lm, isError: em } = useMatchCategories();
+  const { data: fixtures = [], isLoading: lf, isError: ef } = useLeagueFixtures();
 
-  const {
-    data:      fixtures = [],
-    isLoading: loadingFixtures,
-    isError:   errorFixtures,
-  } = useIPLFixtures();
-
-  const fixtureUpcoming = fixtures.filter((f) => f.isUpcoming);
-  const merged          = dedupeMatches([...upcomingMatches, ...fixtureUpcoming]);
-
-  return {
-    upcoming:  merged,
-    isLoading: loadingMatches || loadingFixtures,
-    isError:   errorMatches   || errorFixtures,
-  };
+  const merged = dedupeMatches([...upcomingMatches, ...fixtures.filter(f => f.isUpcoming)]);
+  return { upcoming: merged, isLoading: lm || lf, isError: em || ef };
 }
 
+// ── useLeagueTable ────────────────────────────────────────────
+
+export function useLeagueTable() {
+  const { league } = useLeague();
+  const slug = league.id;
+
+  return useQuery<StandingsRow[]>({
+    queryKey:             [`${slug}:table`],
+    queryFn:              () => getLeagueTable(slug),
+    staleTime:            15 * 60_000,
+    refetchOnMount:       true,
+    refetchOnWindowFocus: false,
+    retry:                0,
+    placeholderData:      (prev) => prev ?? [],
+  });
+}
+
+// Keep old name as alias
+export { useLeagueTable as useIPLTable };
+
 // ── useMatches ────────────────────────────────────────────────
-//
-// Flat deduped Match[] across all categories.
-// Same query key as useMatchCategories → zero extra API calls.
 
 export function useMatches(): UseQueryResult<Match[], Error> {
+  const { league } = useLeague();
+  const slug = league.id;
+
   return useQuery<MatchData, Error, Match[]>({
-    queryKey: ['ipl:matches'],
-    queryFn:  () => getIPLMatches(false),
+    queryKey: [`${slug}:matches`],
+    queryFn:  () => getLeagueMatches(slug, false),
     select:   (data) => {
       const seen = new Set<string>();
       const out: Match[] = [];
       for (const m of [...data.live, ...data.upcoming, ...data.completed]) {
-        if (!seen.has(m.id)) {
-          seen.add(m.id);
-          out.push(m);
-        }
+        if (!seen.has(m.id)) { seen.add(m.id); out.push(m); }
       }
       return out;
     },
@@ -170,9 +161,6 @@ export function useMatches(): UseQueryResult<Match[], Error> {
 }
 
 // ── useFullMatch ──────────────────────────────────────────────
-//
-// Single match detail. Polls every 30 s while live.
-// retry: 0 — matchService.getMatchFull already retries on AbortError.
 
 export function useFullMatch(id: string) {
   return useQuery<FullMatch | null>({
@@ -181,32 +169,13 @@ export function useFullMatch(id: string) {
     staleTime:            0,
     refetchOnMount:       true,
     refetchOnWindowFocus: false,
-    refetchInterval:      (q) =>
-      q.state.data?.status === 'live' ? 30_000 : false,
-    retry:   0,
-    enabled: !!id,
-  });
-}
-
-// ── useIPLTable ───────────────────────────────────────────────
-//
-// IPL 2026 points table. 15-min stale time — updates after every match.
-
-export function useIPLTable() {
-  return useQuery<StandingsRow[]>({
-    queryKey:             ['ipl:table'],
-    queryFn:              () => getIPLTable(),
-    staleTime:            15 * 60_000,
-    refetchOnMount:       true,
-    refetchOnWindowFocus: false,
+    refetchInterval:      (q) => q.state.data?.status === 'live' ? 30_000 : false,
     retry:                0,
-    placeholderData:      (prev) => prev ?? [],
+    enabled:              !!id,
   });
 }
 
 // ── useCachedMatch ────────────────────────────────────────────
-//
-// Synchronous cache lookup — no network call.
 
 export function useCachedMatch(matchId: string): Match | null {
   return getMatchFromCache(matchId);

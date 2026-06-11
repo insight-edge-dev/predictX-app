@@ -1,142 +1,156 @@
-import { supabase } from "@/lib/supabase";
-import type { Session, User } from "@supabase/supabase-js";
+/**
+ * authService.ts — custom phone OTP auth.
+ * Calls backend directly (not Supabase Auth).
+ */
 
-// ── Types ────────────────────────────────────────────────────
+import { API_BASE_URL } from '@/config/api';
+import { setAccessToken, setRefreshToken, clearRefreshToken, getRefreshToken } from './api';
 
-export interface AuthResult {
-  success: boolean;
-  user: User | null;
-  session: Session | null;
-  error: string | null;
+export interface AppUser {
+  id:             string;
+  phone:          string;
+  displayName:    string | null;
+  favouriteTeams: string[];
+  isNewUser?:     boolean;
+}
+
+export interface AuthTokens {
+  accessToken:  string;
+  refreshToken: string;
+  expiresIn:    number;
 }
 
 export interface SimpleResult {
   success: boolean;
-  error: string | null;
+  error:   string | null;
 }
 
-// ── Helpers ──────────────────────────────────────────────────
+export interface VerifyResult {
+  success: boolean;
+  user:    AppUser | null;
+  tokens:  AuthTokens | null;
+  error:   string | null;
+}
 
-function formatPhone(phone: string): string {
-  const digits = phone.replace(/\D/g, '');
+export interface RefreshResult {
+  success: boolean;
+  user:    AppUser | null;
+  tokens:  AuthTokens | null;
+}
+
+function formatPhone(raw: string): string {
+  const digits = raw.replace(/\D/g, '');
   return digits.startsWith('91') ? `+${digits}` : `+91${digits}`;
 }
 
-function catchMsg(e: unknown, fallback: string): string {
-  return e instanceof Error ? e.message : fallback;
-}
-
-function friendlyError(msg: string): string {
-  const l = msg.toLowerCase();
-  if (l.includes('token') && (l.includes('invalid') || l.includes('expired')))
-    return 'Incorrect or expired OTP. Please try again.';
-  if (l.includes('otp') && l.includes('expired'))
-    return 'OTP has expired. Please request a new one.';
-  if (l.includes('invalid login') || l.includes('invalid credentials') || l.includes('wrong password'))
-    return 'Incorrect password.';
-  if (l.includes('rate limit') || l.includes('too many'))
-    return 'Too many attempts. Please wait a moment.';
-  if (l.includes('user not found') || l.includes('no user'))
-    return 'No account found with this number.';
-  if (l.includes('password') && l.includes('least'))
-    return 'Password must be at least 6 characters.';
-  if (l.includes('phone') && l.includes('invalid'))
-    return 'Invalid phone number.';
-  return msg;
+async function post<T>(endpoint: string, body: object): Promise<T> {
+  const res = await fetch(`${API_BASE_URL}${endpoint}`, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify(body),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
+  return data as T;
 }
 
 // ── Send OTP ─────────────────────────────────────────────────
 
 export async function sendOtp(phone: string): Promise<SimpleResult> {
   try {
-    const { error } = await supabase.auth.signInWithOtp({
-      phone: formatPhone(phone),
-    });
-    if (error) return { success: false, error: friendlyError(error.message) };
+    await post('/auth/send-otp', { phone: formatPhone(phone) });
     return { success: true, error: null };
-  } catch (e) {
-    return { success: false, error: catchMsg(e, 'Failed to send OTP') };
+  } catch (e: any) {
+    return { success: false, error: e.message ?? 'Failed to send OTP' };
   }
 }
 
 // ── Verify OTP ────────────────────────────────────────────────
 
-export async function verifyOtp(phone: string, token: string): Promise<AuthResult> {
+export async function verifyOtp(phone: string, otp: string): Promise<VerifyResult> {
   try {
-    const { data, error } = await supabase.auth.verifyOtp({
-      phone: formatPhone(phone),
-      token,
-      type: 'sms',
-    });
-    if (error) return { success: false, user: null, session: null, error: friendlyError(error.message) };
-    return { success: true, user: data.user, session: data.session, error: null };
-  } catch (e) {
-    return { success: false, user: null, session: null, error: catchMsg(e, 'OTP verification failed') };
+    const data = await post<{ accessToken: string; refreshToken: string; expiresIn: number; user: AppUser }>(
+      '/auth/verify-otp',
+      { phone: formatPhone(phone), otp },
+    );
+    return {
+      success: true,
+      user:    data.user,
+      tokens:  { accessToken: data.accessToken, refreshToken: data.refreshToken, expiresIn: data.expiresIn },
+      error:   null,
+    };
+  } catch (e: any) {
+    return { success: false, user: null, tokens: null, error: e.message ?? 'Verification failed' };
   }
 }
 
-// ── Sign In with Password ─────────────────────────────────────
+// ── Refresh session (called on app start) ─────────────────────
 
-export async function signInWithPassword(phone: string, password: string): Promise<AuthResult> {
+export async function refreshSession(): Promise<RefreshResult> {
+  const raw = await getRefreshToken();
+  if (!raw) return { success: false, user: null, tokens: null };
+
   try {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      phone: formatPhone(phone),
-      password,
-    });
-    if (error) return { success: false, user: null, session: null, error: friendlyError(error.message) };
-    return { success: true, user: data.user, session: data.session, error: null };
-  } catch (e) {
-    return { success: false, user: null, session: null, error: catchMsg(e, 'Login failed') };
+    const data = await post<{ accessToken: string; refreshToken: string; expiresIn: number; user: AppUser }>(
+      '/auth/refresh',
+      { refreshToken: raw },
+    );
+    return {
+      success: true,
+      user:    data.user,
+      tokens:  { accessToken: data.accessToken, refreshToken: data.refreshToken, expiresIn: data.expiresIn },
+    };
+  } catch {
+    return { success: false, user: null, tokens: null };
   }
 }
 
-// ── Update user details (name + password — called after OTP verify in signup) ──
+// ── Set display name ──────────────────────────────────────────
 
-export async function updateUserDetails(
-  displayName: string,
-  password: string,
-): Promise<SimpleResult> {
+export async function setDisplayName(name: string, accessToken: string): Promise<SimpleResult> {
   try {
-    const { error } = await supabase.auth.updateUser({
-      password,
-      data: { display_name: displayName },
+    const res = await fetch(`${API_BASE_URL}/auth/set-name`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+      body:    JSON.stringify({ displayName: name }),
     });
-    if (error) return { success: false, error: friendlyError(error.message) };
+    const data = await res.json();
+    if (!res.ok) return { success: false, error: data.error ?? 'Failed to save name' };
     return { success: true, error: null };
-  } catch (e) {
-    return { success: false, error: catchMsg(e, 'Failed to update account') };
+  } catch (e: any) {
+    return { success: false, error: e.message ?? 'Failed to save name' };
   }
 }
 
-// ── Sign Out ─────────────────────────────────────────────────
+// ── Read stored refresh token (for logout) ───────────────────
 
-export async function signOut(): Promise<SimpleResult> {
+export async function getStoredRefreshToken(): Promise<string | null> {
+  return getRefreshToken();
+}
+
+// ── Persist tokens after login ────────────────────────────────
+
+export async function persistTokens(tokens: AuthTokens): Promise<void> {
+  setAccessToken(tokens.accessToken);
+  await setRefreshToken(tokens.refreshToken);
+}
+
+// ── Clear tokens on logout ────────────────────────────────────
+
+export async function clearTokens(): Promise<void> {
+  setAccessToken(null);
+  await clearRefreshToken();
+}
+
+// ── Logout ────────────────────────────────────────────────────
+
+export async function logout(accessToken: string, refreshToken: string): Promise<void> {
   try {
-    const { error } = await supabase.auth.signOut();
-    if (error) return { success: false, error: error.message };
-    return { success: true, error: null };
-  } catch (e) {
-    return { success: false, error: catchMsg(e, 'Logout failed') };
-  }
-}
-
-// ── Session ──────────────────────────────────────────────────
-
-export async function getSession(): Promise<{ session: Session | null; error: string | null }> {
-  try {
-    const { data, error } = await supabase.auth.getSession();
-    if (error) return { session: null, error: error.message };
-    return { session: data.session, error: null };
-  } catch (e) {
-    return { session: null, error: catchMsg(e, 'Failed to restore session') };
-  }
-}
-
-export function onAuthStateChange(
-  callback: (event: string, session: Session | null) => void,
-) {
-  const { data } = supabase.auth.onAuthStateChange((event, session) => {
-    callback(event, session);
-  });
-  return data.subscription;
+    await fetch(`${API_BASE_URL}/auth/logout`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+      body:    JSON.stringify({ refreshToken }),
+    });
+  } catch { /* fire and forget */ }
+  await clearTokens();
 }

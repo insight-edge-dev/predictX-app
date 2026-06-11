@@ -53,6 +53,7 @@ export interface SquadData {
 export interface BatsmanRow {
   id:         string;
   name:       string;
+  imageUrl?:  string | null;
   runs:       number;
   balls:      number;
   fours:      number;
@@ -65,13 +66,14 @@ export interface BatsmanRow {
 }
 
 export interface BowlerRow {
-  id:      string;
-  name:    string;
-  overs:   number;
-  maidens: number;
-  runs:    number;
-  wickets: number;
-  economy: number;
+  id:       string;
+  name:     string;
+  imageUrl?: string | null;
+  overs:    number;
+  maidens:  number;
+  runs:     number;
+  wickets:  number;
+  economy:  number;
 }
 
 export interface InningsExtras {
@@ -189,6 +191,93 @@ let lastFetch  = 0;
 let inflightMatches:  Promise<MatchData>    | null = null;
 let inflightFixtures: Promise<Match[]>      | null = null;
 let inflightTable:    Promise<StandingsRow[]> | null = null;
+
+// ── getLeagueMatches ──────────────────────────────────────────
+// GET /api/leagues/:slug/matches  →  { live, upcoming, completed }
+//
+// Generic league entry point — works for any supported league slug.
+// Per-slug in-flight deduplication and 60 s cache.
+
+const leagueMatchCache: Record<string, { data: MatchData; at: number }> = {};
+const inflightLeagueMatches: Record<string, Promise<MatchData>>         = {};
+const inflightLeagueFixtures: Record<string, Promise<Match[]>>          = {};
+const inflightLeagueTables: Record<string, Promise<StandingsRow[]>>     = {};
+
+export async function getLeagueMatches(
+  slug:         string,
+  forceRefresh = false,
+): Promise<MatchData> {
+  const cached = leagueMatchCache[slug];
+  if (!forceRefresh && cached && Date.now() - cached.at < TTL_MATCHES) return cached.data;
+  if (inflightLeagueMatches[slug]) return inflightLeagueMatches[slug];
+
+  inflightLeagueMatches[slug] = fetchWithRetry(
+    `getLeagueMatches(${slug})`,
+    async () => {
+      const data = await api.get<MatchData>(`/leagues/${slug}/matches`);
+      const safe: MatchData = {
+        live:      Array.isArray(data.live)      ? data.live      : [],
+        upcoming:  Array.isArray(data.upcoming)  ? data.upcoming  : [],
+        completed: Array.isArray(data.completed) ? data.completed : [],
+      };
+      leagueMatchCache[slug] = { data: safe, at: Date.now() };
+      return safe;
+    },
+    leagueMatchCache[slug]?.data ?? EMPTY,
+  ).finally(() => { delete inflightLeagueMatches[slug]; });
+
+  return inflightLeagueMatches[slug];
+}
+
+export function invalidateLeagueCache(slug: string): void {
+  delete leagueMatchCache[slug];
+}
+
+// ── getLeagueFixtures ─────────────────────────────────────────
+// GET /api/leagues/:slug/fixtures  →  { fixtures: Match[] }
+
+export async function getLeagueFixtures(slug: string): Promise<Match[]> {
+  const cacheKey = `league:fixtures:${slug}`;
+  const cached   = cacheGet<Match[]>(cacheKey);
+  if (cached) return cached;
+  if (inflightLeagueFixtures[slug]) return inflightLeagueFixtures[slug];
+
+  inflightLeagueFixtures[slug] = fetchWithRetry(
+    `getLeagueFixtures(${slug})`,
+    async () => {
+      const data     = await api.get<{ fixtures: Match[] }>(`/leagues/${slug}/fixtures`);
+      const fixtures = Array.isArray(data.fixtures) ? data.fixtures : [];
+      cacheSet(cacheKey, fixtures, 6 * 60 * 60_000);
+      return fixtures;
+    },
+    cacheGet<Match[]>(cacheKey) ?? [],
+  ).finally(() => { delete inflightLeagueFixtures[slug]; });
+
+  return inflightLeagueFixtures[slug];
+}
+
+// ── getLeagueTable ────────────────────────────────────────────
+// GET /api/leagues/:slug/table  →  { table: StandingsRow[] }
+
+export async function getLeagueTable(slug: string): Promise<StandingsRow[]> {
+  const cacheKey = `league:table:${slug}`;
+  const cached   = cacheGet<StandingsRow[]>(cacheKey);
+  if (cached) return cached;
+  if (inflightLeagueTables[slug]) return inflightLeagueTables[slug];
+
+  inflightLeagueTables[slug] = fetchWithRetry(
+    `getLeagueTable(${slug})`,
+    async () => {
+      const res  = await api.get<{ table: StandingsRow[] }>(`/leagues/${slug}/table`);
+      const rows = Array.isArray(res.table) ? res.table : [];
+      cacheSet(cacheKey, rows, 6 * 60 * 60_000);
+      return rows;
+    },
+    cacheGet<StandingsRow[]>(cacheKey) ?? [],
+  ).finally(() => { delete inflightLeagueTables[slug]; });
+
+  return inflightLeagueTables[slug];
+}
 
 // ── getIPLMatches ─────────────────────────────────────────────
 // GET /api/ipl/matches → { live, upcoming, completed }

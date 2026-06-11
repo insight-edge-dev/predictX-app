@@ -91,11 +91,13 @@ export interface TipResponse {
 /** Match with optional lightweight prediction attached */
 export type MatchWithTip = Match & { tip: LightTip | null };
 
-export async function getTipsList(): Promise<MatchWithTip[]> {
-  const data = await api.get<{ matches: MatchWithTip[] }>('/tips');
+export async function getTipsList(leagueId?: string): Promise<MatchWithTip[]> {
+  const qs = leagueId ? `?league=${encodeURIComponent(leagueId)}` : '';
+  const data = await api.get<{ matches: MatchWithTip[] }>(`/tips${qs}`);
   return data.matches ?? [];
 }
 
-export async function getMatchTip(matchId: string): Promise<TipResponse> {
-  return api.get<TipResponse>(`/tips/${matchId}`);
+export async function getMatchTip(matchId: string, leagueId?: string): Promise<TipResponse> {
+  const qs = leagueId ? `?league=${encodeURIComponent(leagueId)}` : '';
+  return api.get<TipResponse>(`/tips/${matchId}${qs}`);
 }

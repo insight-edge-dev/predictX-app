@@ -1,107 +1,106 @@
-import { createContext, useContext, useEffect, useState, useCallback, useRef } from "react";
-import type { Session, User } from "@supabase/supabase-js";
-import * as authService from "@/services/authService";
-import * as profileService from "@/services/profileService";
-import type { UserProfile } from "@/types/prediction";
+import { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
+import * as authService from '@/services/authService';
+import { setAccessToken, getAccessToken, onAuthExpired } from '@/services/api';
+import type { AppUser } from '@/services/authService';
+import type { UserProfile } from '@/types/prediction';
+import api from '@/services/api';
 
-// ── Types ────────────────────────────────────────────────────
+// ── Types ─────────────────────────────────────────────────────
 
 interface AuthState {
-  user:            User | null;
-  session:         Session | null;
+  user:            AppUser | null;
   profile:         UserProfile | null;
   isLoading:       boolean;
   isAuthenticated: boolean;
 }
 
 interface AuthContextValue extends AuthState {
-  // Login — password
-  loginWithPassword: (phone: string, password: string) => Promise<{ success: boolean; error: string | null }>;
-  // Login — OTP (send + verify)
-  sendOtp:           (phone: string) => Promise<{ success: boolean; error: string | null }>;
-  verifyOtpLogin:    (phone: string, otp: string) => Promise<{ success: boolean; error: string | null }>;
-  // Signup — final step (called after screen-level OTP verify)
-  completeSignup:    (name: string, password: string) => Promise<{ success: boolean; error: string | null }>;
-  // Common
+  sendOtp:              (phone: string) => Promise<{ success: boolean; error: string | null }>;
+  verifyOtpLogin:       (phone: string, otp: string) => Promise<{ success: boolean; isNewUser: boolean; error: string | null }>;
+  completeSignup:       (name: string) => Promise<{ success: boolean; error: string | null }>;
   logout:               () => Promise<void>;
+  deleteAccount:        () => Promise<{ success: boolean; error: string | null }>;
   refreshProfile:       () => Promise<void>;
   updateFavouriteTeams: (teams: string[]) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-// ── Provider ─────────────────────────────────────────────────
+// ── Provider ──────────────────────────────────────────────────
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<AuthState>({
-    user:            null,
-    session:         null,
-    profile:         null,
-    isLoading:       true,
-    isAuthenticated: false,
+    user: null, profile: null, isLoading: true, isAuthenticated: false,
   });
 
-  const mountedRef = useRef(true);
+  const mountedRef     = useRef(true);
+  const accessTokenRef = useRef<string | null>(null);
 
-  const safeSetState = useCallback(
-    (updater: AuthState | ((prev: AuthState) => AuthState)) => {
+  const safeSet = useCallback(
+    (updater: AuthState | ((p: AuthState) => AuthState)) => {
       if (mountedRef.current) setState(updater);
-    },
-    [],
+    }, [],
   );
 
+  // ── Profile loader ────────────────────────────────────────
+
   const loadProfile = useCallback(async (userId: string): Promise<UserProfile | null> => {
-    try { return await profileService.getProfile(userId); }
-    catch { return null; }
+    try {
+      return await api.get<UserProfile>(`/user/profile`);
+    } catch {
+      return null;
+    }
   }, []);
 
-  const setAuthenticated = useCallback(async (user: User, session: Session) => {
+  // ── Authenticate state from tokens + user ─────────────────
+
+  const setAuthenticated = useCallback(async (user: AppUser, tokens: authService.AuthTokens) => {
+    await authService.persistTokens(tokens);
+    accessTokenRef.current = tokens.accessToken;
     const profile = await loadProfile(user.id);
-    safeSetState({ user, session, profile, isLoading: false, isAuthenticated: true });
-  }, [loadProfile, safeSetState]);
+    safeSet({ user, profile, isLoading: false, isAuthenticated: true });
+  }, [loadProfile, safeSet]);
 
-  const clearState = useCallback(() => {
-    safeSetState({ user: null, session: null, profile: null, isLoading: false, isAuthenticated: false });
-  }, [safeSetState]);
+  const clearState = useCallback(async () => {
+    await authService.clearTokens();
+    accessTokenRef.current = null;
+    safeSet({ user: null, profile: null, isLoading: false, isAuthenticated: false });
+  }, [safeSet]);
 
-  // ── Init ──────────────────────────────────────────────────
+  // ── Init on app start ─────────────────────────────────────
 
   useEffect(() => {
     mountedRef.current = true;
 
     async function init() {
-      const { session } = await authService.getSession();
+      const result = await authService.refreshSession();
       if (!mountedRef.current) return;
-      if (session?.user) {
-        await setAuthenticated(session.user, session);
+
+      if (result.success && result.user && result.tokens) {
+        await authService.persistTokens(result.tokens);
+        accessTokenRef.current = result.tokens.accessToken;
+        const profile = await loadProfile(result.user.id);
+        safeSet({ user: result.user, profile, isLoading: false, isAuthenticated: true });
       } else {
-        safeSetState((prev) => ({ ...prev, isLoading: false }));
+        await authService.clearTokens();
+        safeSet({ user: null, profile: null, isLoading: false, isAuthenticated: false });
       }
     }
+
     init();
 
-    const sub = authService.onAuthStateChange(async (event, session) => {
-      if (!mountedRef.current) return;
-      if (event === 'INITIAL_SESSION') return;
-      if (event === 'SIGNED_OUT') { clearState(); return; }
-      if (session?.user) await setAuthenticated(session.user, session);
+    // Listen for token expiry that couldn't be recovered
+    const unsub = onAuthExpired(() => {
+      if (mountedRef.current) clearState();
     });
 
     return () => {
       mountedRef.current = false;
-      sub.unsubscribe();
+      unsub();
     };
-  }, [setAuthenticated, clearState, safeSetState]);
+  }, [loadProfile, safeSet, clearState]);
 
-  // ── Auth methods ──────────────────────────────────────────
-
-  const loginWithPassword = useCallback(async (phone: string, password: string) => {
-    const result = await authService.signInWithPassword(phone, password);
-    if (!result.success || !result.user || !result.session)
-      return { success: false, error: result.error ?? 'Login failed' };
-    await setAuthenticated(result.user, result.session);
-    return { success: true, error: null };
-  }, [setAuthenticated]);
+  // ── Auth actions ──────────────────────────────────────────
 
   const sendOtp = useCallback(async (phone: string) => {
     return authService.sendOtp(phone);
@@ -109,55 +108,72 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const verifyOtpLogin = useCallback(async (phone: string, otp: string) => {
     const result = await authService.verifyOtp(phone, otp);
-    if (!result.success || !result.user || !result.session)
-      return { success: false, error: result.error ?? 'Verification failed' };
-    await setAuthenticated(result.user, result.session);
-    return { success: true, error: null };
+    if (!result.success || !result.user || !result.tokens) {
+      return { success: false, isNewUser: false, error: result.error ?? 'Verification failed' };
+    }
+    await setAuthenticated(result.user, result.tokens);
+    return { success: true, isNewUser: !!result.user.isNewUser, error: null };
   }, [setAuthenticated]);
 
-  /**
-   * completeSignup — called by the signup screen after it has already
-   * verified the OTP (Supabase session is live but isAuthenticated is still
-   * false because we bypassed the context). Sets name + password, creates
-   * the profile row, then marks the user as fully authenticated.
-   */
-  const completeSignup = useCallback(async (name: string, password: string) => {
-    const update = await authService.updateUserDetails(name, password);
-    if (!update.success) return { success: false, error: update.error };
+  const completeSignup = useCallback(async (name: string) => {
+    const token = getAccessToken();
+    if (!token) return { success: false, error: 'Not authenticated' };
 
-    const { session } = await authService.getSession();
-    if (!session?.user) return { success: false, error: 'Session lost. Please try again.' };
+    const result = await authService.setDisplayName(name, token);
+    if (!result.success) return result;
 
-    await profileService.updateProfile(session.user.id, { displayName: name });
-    await setAuthenticated(session.user, session);
+    // Update local state with the name
+    safeSet(prev => ({
+      ...prev,
+      user:    prev.user ? { ...prev.user, displayName: name } : prev.user,
+      profile: prev.profile ? { ...prev.profile, displayName: name } : prev.profile,
+    }));
     return { success: true, error: null };
-  }, [setAuthenticated]);
+  }, [safeSet]);
+
+  const deleteAccount = useCallback(async () => {
+    try {
+      await api.delete('/auth/account');
+      await clearState();
+      return { success: true, error: null };
+    } catch (e: any) {
+      return { success: false, error: e.message ?? 'Failed to delete account' };
+    }
+  }, [clearState]);
 
   const logout = useCallback(async () => {
-    await authService.signOut();
-    clearState();
+    const accessToken  = getAccessToken() ?? '';
+    const refreshToken = (await authService.getStoredRefreshToken()) ?? '';
+    // Revoke on backend (fire and forget — don't block UI)
+    void authService.logout(accessToken, refreshToken);
+    await clearState();
   }, [clearState]);
 
   const refreshProfile = useCallback(async () => {
     if (!state.user) return;
     const profile = await loadProfile(state.user.id);
-    safeSetState((prev) => ({ ...prev, profile }));
-  }, [state.user, loadProfile, safeSetState]);
+    safeSet(prev => ({ ...prev, profile }));
+  }, [state.user, loadProfile, safeSet]);
 
   const updateFavouriteTeams = useCallback(async (teams: string[]) => {
     if (!state.user) return;
-    await profileService.updateFavouriteTeams(state.user.id, teams);
-    safeSetState((prev) => ({
-      ...prev,
-      profile: prev.profile ? { ...prev.profile, favoriteTeams: teams } : prev.profile,
-    }));
-  }, [state.user, safeSetState]);
+    try {
+      await api.patch('/user/profile', { favouriteTeams: teams });
+      safeSet(prev => ({
+        ...prev,
+        user:    prev.user    ? { ...prev.user, favouriteTeams: teams } : prev.user,
+        profile: prev.profile ? { ...prev.profile, favoriteTeams: teams } : prev.profile,
+      }));
+    } catch (e: any) {
+      console.error('[Auth] updateFavouriteTeams:', e.message);
+    }
+  }, [state.user, safeSet]);
 
   return (
     <AuthContext.Provider value={{
       ...state,
-      loginWithPassword, sendOtp, verifyOtpLogin, completeSignup,
-      logout, refreshProfile, updateFavouriteTeams,
+      sendOtp, verifyOtpLogin, completeSignup,
+      logout, deleteAccount, refreshProfile, updateFavouriteTeams,
     }}>
       {children}
     </AuthContext.Provider>

@@ -1,34 +1,44 @@
 /**
- * Design system — single source of truth for the app's visual language.
- * Premium dark theme: deep navy bg, amber gold accent.
+ * Design system — PredictX
+ * Light theme, 8-point spacing grid. Cricbuzz / SofaScore quality.
  */
 
 export const colors = {
-  bg:           '#07080F',
-  card:         '#0D1421',
-  cardElevated: '#152130',
-  border:       '#1A2B3D',
+  // Surfaces
+  bg:           '#F8F9FB',
+  card:         '#FFFFFF',
+  cardElevated: '#F3F4F6',
 
-  accent:    '#F59E0B',
-  accentDim: 'rgba(245, 158, 11, 0.12)',
+  // Borders
+  border:       '#E5E7EB',
+  borderLight:  '#F3F4F6',
 
-  live:    '#F43F5E',
-  liveDim: 'rgba(244, 63, 94, 0.12)',
+  // Brand (blue — used for active nav, CTAs, links)
+  accent:    '#2563EB',
+  accentDim: 'rgba(37, 99, 235, 0.08)',
 
-  success:    '#10B981',
-  successDim: 'rgba(16, 185, 129, 0.12)',
+  // Live / red
+  live:    '#DC2626',
+  liveDim: 'rgba(220, 38, 38, 0.08)',
 
-  warning:    '#F59E0B',
-  warningDim: 'rgba(245, 158, 11, 0.12)',
+  // Win / green
+  success:    '#16A34A',
+  successDim: 'rgba(22, 163, 74, 0.08)',
 
-  danger:    '#EF4444',
-  dangerDim: 'rgba(239, 68, 68, 0.12)',
+  // Warning / upcoming
+  warning:    '#D97706',
+  warningDim: 'rgba(217, 119, 6, 0.08)',
 
-  textPrimary:   '#F8FAFC',
-  textSecondary: '#94A3B8',
-  textMuted:     '#475569',
+  // Danger
+  danger:    '#DC2626',
+  dangerDim: 'rgba(220, 38, 38, 0.08)',
 
-  // IPL team brand colours
+  // Text
+  textPrimary:   '#111827',
+  textSecondary: '#6B7280',
+  textMuted:     '#9CA3AF',
+
+  // IPL team brand colours (unchanged — used for logo fallback circles)
   team: {
     CSK:  '#F9CD05',
     MI:   '#004BA0',
@@ -43,6 +53,7 @@ export const colors = {
   } as Record<string, string>,
 };
 
+// 8-point spacing grid
 export const spacing = {
   xs:   4,
   sm:   8,
@@ -53,20 +64,25 @@ export const spacing = {
   xxxl: 32,
 };
 
+// Border radii — restrained, native-feeling
 export const radius = {
-  sm: 8,
-  md: 12,
-  lg: 16,
-  xl: 24,
+  sm:  6,
+  md:  10,
+  lg:  12,
+  xl:  16,
+  xxl: 20,
 };
 
+// Typography scale — 5-level hierarchy
+// Page Title: xxxl/700 | Section: lg/600 | Card Title: base/600
+// Body: md/400       | Metadata: sm/400  | Tag: xs/600
 export const font = {
-  xs:   10,
+  xs:   11,
   sm:   12,
   md:   14,
-  base: 16,
-  lg:   18,
-  xl:   22,
-  xxl:  28,
-  xxxl: 34,
+  base: 15,
+  lg:   17,
+  xl:   20,
+  xxl:  24,
+  xxxl: 28,
 };

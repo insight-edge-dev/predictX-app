@@ -1,6 +1,7 @@
 {
   "cli": {
-    "version": ">= 16.0.0"
+    "version": ">= 16.0.0",
+    "appVersionSource": "local"
   },
   "build": {
     "preview": {
@@ -8,8 +9,9 @@
         "buildType": "apk"
       },
       "env": {
+        "EXPO_PUBLIC_API_URL": "https://cricketiq-backend-elrd.onrender.com",
         "EXPO_PUBLIC_SUPABASE_URL": "https://qngcfkebulpeideitdkp.supabase.co",
-        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFuZ2Nma2VidWxwZWlkZWl0ZGtwIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NDUwMzU4MCwiZXhwIjoyMDkwMDc5NTgwfQ.cei4LtZKcfbH8xNtEkac9xH1OrBQ_8ewqnbWLV-S0kw"
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFuZ2Nma2VidWxwZWlkZWl0ZGtwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ1MDM1ODAsImV4cCI6MjA5MDA3OTU4MH0.pGiZait2FRt2U70OHl45_NQBYmyDcXGF7rWZHzi5mP4"
       }
     },
     "production": {
@@ -17,8 +19,9 @@
         "buildType": "app-bundle"
       },
       "env": {
+        "EXPO_PUBLIC_API_URL": "https://cricketiq-backend-elrd.onrender.com",
         "EXPO_PUBLIC_SUPABASE_URL": "https://qngcfkebulpeideitdkp.supabase.co",
-        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFuZ2Nma2VidWxwZWlkZWl0ZGtwIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NDUwMzU4MCwiZXhwIjoyMDkwMDc5NTgwfQ.cei4LtZKcfbH8xNtEkac9xH1OrBQ_8ewqnbWLV-S0kw"
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFuZ2Nma2VidWxwZWlkZWl0ZGtwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ1MDM1ODAsImV4cCI6MjA5MDA3OTU4MH0.pGiZait2FRt2U70OHl45_NQBYmyDcXGF7rWZHzi5mP4"
       }
     }
   }

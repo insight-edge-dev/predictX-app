@@ -1,14 +1,14 @@
 import { getIPLTeamLogoUrl, getIPLTeamColor as _getIPLTeamColor } from "@/constants/iplTeams";
 
 export const colors = {
-  background: "#07080F",
-  card: "#0D1421",
-  border: "#1A2B3D",
-  accent: "#F59E0B",
-  textPrimary: "#F8FAFC",
-  textSecondary: "#94A3B8",
-  success: "#10B981",
-  danger: "#EF4444",
+  background:    "#F8F9FB",
+  card:          "#FFFFFF",
+  border:        "#E5E7EB",
+  accent:        "#2563EB",
+  textPrimary:   "#111827",
+  textSecondary: "#6B7280",
+  success:       "#16A34A",
+  danger:        "#DC2626",
 } as const;
 
 export type ColorKey = keyof typeof colors;
@@ -26,10 +26,31 @@ export const iplTeamColors: Record<string, string> = {
   LSG: "#00AEEF",
 };
 
+/**
+ * Distinct, theme-friendly palette for teams with no known brand color
+ * (non-IPL leagues — PSL, BBL, BPL, T20 WC, etc). Picked deterministically
+ * per team so the same team always gets the same color.
+ */
+const FALLBACK_PALETTE = [
+  "#3B82F6", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6",
+  "#EC4899", "#14B8A6", "#F97316", "#6366F1", "#84CC16",
+  "#06B6D4", "#A855F7",
+];
+
+function fallbackColorFor(shortName: string): string {
+  if (!shortName) return colors.textSecondary;
+  let hash = 0;
+  for (let i = 0; i < shortName.length; i++) {
+    hash = (hash << 5) - hash + shortName.charCodeAt(i);
+    hash |= 0;
+  }
+  return FALLBACK_PALETTE[Math.abs(hash) % FALLBACK_PALETTE.length];
+}
+
 export function getTeamColor(shortName: string): string {
-  return _getIPLTeamColor(shortName) !== "#94A3B8"
-    ? _getIPLTeamColor(shortName)
-    : (iplTeamColors[shortName] ?? colors.textSecondary);
+  if (_getIPLTeamColor(shortName) !== "#94A3B8") return _getIPLTeamColor(shortName);
+  if (iplTeamColors[shortName]) return iplTeamColors[shortName];
+  return fallbackColorFor(shortName);
 }
 
 /**

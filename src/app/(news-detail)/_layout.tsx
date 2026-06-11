@@ -5,7 +5,7 @@ export default function NewsDetailLayout() {
     <Stack
       screenOptions={{
         headerShown:  false,
-        contentStyle: { backgroundColor: "#07080F" },
+        contentStyle: { backgroundColor: "#F8F9FB" },
       }}
     />
   );
