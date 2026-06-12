@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import {
   View, Text, Pressable, Image,
 } from 'react-native';
@@ -8,7 +9,7 @@ import { TeamCrest } from '@/components/TeamCrest';
 import { API_BASE_URL } from '@/config/api';
 import type { AdaptedMatch } from '@/utils/matchAdapter';
 import type { FootballMatch, FootballMatchWithTip } from '@/types/football';
-import type { NewsItem } from '@/hooks/useHome';
+import type { NewsItem, RankingTeam, RankingPlayer } from '@/hooks/useHome';
 import type { MatchWithTip } from '@/services/tipsService';
 import type { StandingsRow } from '@/services/matchService';
 
@@ -31,6 +32,17 @@ export const WC_FACTS = [
   { icon: '🥇', text: 'Uruguay won the inaugural 1930 World Cup on home soil — the first-ever host nation to win the title.', color: '#F59E0B' },
 ];
 
+export const CRICKET_FACTS = [
+  { icon: '🏆', text: 'MS Dhoni is the only captain to win all three ICC limited-overs trophies — the 2007 T20 World Cup, 2011 ODI World Cup, and 2013 Champions Trophy.', color: '#F59E0B' },
+  { icon: '⚡', text: "Chris Gayle smashed the fastest century in T20 history — just 30 balls — for RCB against Pune Warriors in IPL 2013.", color: '#E6FF00' },
+  { icon: '🎟️', text: 'The IPL is the most-attended cricket league in the world, regularly drawing over 30,000 fans per match.', color: '#3B82F6' },
+  { icon: '🇮🇳', text: 'India won the 2024 ICC T20 World Cup, beating South Africa in a thriller in Barbados.', color: '#10B981' },
+  { icon: '🔄', text: "A tied T20 match is decided by a Super Over — each side faces one extra over (6 balls) to break the deadlock.", color: '#8B5CF6' },
+  { icon: '💯', text: 'Sachin Tendulkar remains the only batsman to score 100 international centuries, a record across Tests and ODIs combined.', color: '#F59E0B' },
+  { icon: '📈', text: 'T20 cricket, introduced in 2003, is now the most-watched format worldwide — built for prime-time entertainment.', color: '#6366F1' },
+  { icon: '🏏', text: 'Under ICC regulations, a cricket ball must weigh between 155.9–163g with a circumference of 22.4–22.9cm.', color: '#EF4444' },
+];
+
 // ── Team flags (WC short codes → emoji) ───────────────────────
 
 export const FB_FLAGS: Record<string, string> = {
@@ -44,6 +56,18 @@ export const FB_FLAGS: Record<string, string> = {
   CIV: '🇨🇮', TUN: '🇹🇳',
 };
 export function fbFlag(code: string) { return FB_FLAGS[code] ?? '🏳'; }
+
+// ── Cricket country flags (by full name, used in ICC rankings) ─
+export const CRICKET_FLAGS: Record<string, string> = {
+  'India': '🇮🇳', 'England': '🏴󠁧󠁢󠁥󠁮󠁧󠁿', 'Australia': '🇦🇺', 'New Zealand': '🇳🇿',
+  'Pakistan': '🇵🇰', 'South Africa': '🇿🇦', 'Sri Lanka': '🇱🇰', 'West Indies': '🏴',
+  'Bangladesh': '🇧🇩', 'Afghanistan': '🇦🇫', 'Ireland': '🇮🇪', 'Zimbabwe': '🇿🇼',
+  'Scotland': '🏴󠁧󠁢󠁳󠁣󠁴󠁿', 'Netherlands': '🇳🇱', 'Nepal': '🇳🇵', 'UAE': '🇦🇪',
+  'United Arab Emirates': '🇦🇪', 'USA': '🇺🇸', 'United States': '🇺🇸', 'Canada': '🇨🇦',
+  'Namibia': '🇳🇦', 'Oman': '🇴🇲', 'Papua New Guinea': '🇵🇬',
+};
+
+export function cricketFlag(country: string) { return CRICKET_FLAGS[country] ?? '🏏'; }
 
 // ── Date / time helpers ───────────────────────────────────────
 
@@ -110,8 +134,8 @@ export function EmptyCard({ message }: { message: string }) {
 
 // ── SportPill ─────────────────────────────────────────────────
 
-export function SportPill({ emoji, label, color, textColor, onPress }: {
-  emoji: string; label: string; color: string; textColor: string; onPress: () => void;
+export function SportPill({ emoji, label, color, textColor, active = true, onPress }: {
+  emoji: string; label: string; color: string; textColor: string; active?: boolean; onPress: () => void;
 }) {
   return (
     <Pressable
@@ -119,13 +143,17 @@ export function SportPill({ emoji, label, color, textColor, onPress }: {
       style={({ pressed }) => ({
         opacity: pressed ? 0.8 : 1,
         flexDirection: 'row', alignItems: 'center', gap: 5,
-        backgroundColor: color,
+        backgroundColor: active ? color : colors.card,
         borderRadius: 20,
+        borderWidth: active ? 0 : 1,
+        borderColor: colors.border,
         paddingHorizontal: 12, paddingVertical: 6,
       })}
     >
-      <Text style={{ fontSize: 13 }}>{emoji}</Text>
-      <Text style={{ color: textColor, fontSize: font.xs, fontWeight: '800' }}>{label}</Text>
+      <Text style={{ fontSize: 13, opacity: active ? 1 : 0.45 }}>{emoji}</Text>
+      <Text style={{ color: active ? textColor : colors.textSecondary, fontSize: font.xs, fontWeight: '800' }}>
+        {label}
+      </Text>
     </Pressable>
   );
 }
@@ -208,7 +236,7 @@ export function FootballMatchCard({ match, onPress }: { match: FootballMatch; on
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 7 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
             <Text style={{ fontSize: 11 }}>⚽</Text>
-            <Text style={{ color: C_FOOTBALL, fontSize: 10, fontWeight: '700', letterSpacing: 0.5 }}>
+            <Text style={{ color: colors.accent, fontSize: 10, fontWeight: '700', letterSpacing: 0.5 }}>
               {'WC 2026'}{match.group ? ` · Group ${match.group}` : ''}
             </Text>
           </View>
@@ -539,6 +567,76 @@ export function WCStatCard({ card }: { card: StatCard }) {
       <Text style={{ color: card.color, fontSize: 18, fontWeight: '900', letterSpacing: -0.5 }}>{card.stat}</Text>
       <Text style={{ color: colors.textPrimary, fontSize: 10, fontWeight: '700', marginTop: 3 }}>{card.title}</Text>
       <Text style={{ color: colors.textMuted, fontSize: 9, marginTop: 3, lineHeight: 13 }}>{card.desc}</Text>
+    </View>
+  );
+}
+
+// ── ICC Ranking cards ──────────────────────────────────────────
+
+export function RankingTeamCard({ team }: { team: RankingTeam }) {
+  const [imageFailed, setImageFailed] = useState(false);
+  return (
+    <View style={{
+      width: 104, backgroundColor: colors.card, borderRadius: radius.lg,
+      borderWidth: 1, borderColor: colors.border,
+      padding: spacing.md, alignItems: 'center',
+    }}>
+      <Text style={{ color: colors.accent, fontSize: 11, fontWeight: '900', marginBottom: 6 }}>#{team.rank}</Text>
+      {team.image && !imageFailed ? (
+        <Image
+          source={{ uri: team.image }}
+          style={{ width: 32, height: 32, marginBottom: 6 }}
+          resizeMode="contain"
+          onError={() => setImageFailed(true)}
+        />
+      ) : (
+        <View style={{
+          width: 32, height: 32, borderRadius: 16, marginBottom: 6,
+          backgroundColor: colors.accentDim, alignItems: 'center', justifyContent: 'center',
+        }}>
+          <Text style={{ fontSize: 16 }}>{cricketFlag(team.name)}</Text>
+        </View>
+      )}
+      <Text style={{ color: colors.textPrimary, fontSize: font.xs, fontWeight: '800' }} numberOfLines={1}>
+        {team.code || team.name}
+      </Text>
+      <Text style={{ color: colors.textMuted, fontSize: 9, marginTop: 2 }}>{team.rating} pts</Text>
+    </View>
+  );
+}
+
+export function RankingPlayerCard({ player, label }: { player: RankingPlayer; label: string }) {
+  const [imageFailed, setImageFailed] = useState(false);
+  return (
+    <View style={{
+      flex: 1, backgroundColor: colors.card, borderRadius: radius.lg,
+      borderWidth: 1, borderColor: colors.border, padding: spacing.md,
+    }}>
+      <Text style={{ color: colors.textMuted, fontSize: 9, fontWeight: '800', letterSpacing: 0.5, marginBottom: 8 }}>
+        {label.toUpperCase()}
+      </Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+        {player.imageUrl && !imageFailed ? (
+          <Image
+            source={{ uri: player.imageUrl }}
+            style={{ width: 36, height: 36, borderRadius: 18 }}
+            resizeMode="cover"
+            onError={() => setImageFailed(true)}
+          />
+        ) : (
+          <View style={{
+            width: 36, height: 36, borderRadius: 18,
+            backgroundColor: colors.accentDim, alignItems: 'center', justifyContent: 'center',
+          }}>
+            <Text style={{ fontSize: 16 }}>{cricketFlag(player.country)}</Text>
+          </View>
+        )}
+        <View style={{ flex: 1 }}>
+          <Text style={{ color: colors.textPrimary, fontSize: font.xs, fontWeight: '800' }} numberOfLines={1}>{player.name}</Text>
+          <Text style={{ color: colors.textMuted, fontSize: 10, marginTop: 1 }} numberOfLines={1}>{player.country}</Text>
+        </View>
+        <Text style={{ color: colors.accent, fontSize: font.sm, fontWeight: '900' }}>{player.rating}</Text>
+      </View>
     </View>
   );
 }

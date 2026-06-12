@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useLeague, type League } from '@/contexts/LeagueContext';
+import { useLeaguesEndedMap } from '@/hooks/useMatches';
 import { colors, spacing, font, radius } from '@/constants/theme';
 
 const SCREEN_HEIGHT = Dimensions.get('window').height;
@@ -63,6 +64,9 @@ export function LeagueSheet({ visible, onClose, initialSport, onSelect }: Props)
   const cricketLeagues  = leagues.filter(l => (l.sport === 'cricket' || !l.sport) && is2026(l));
   const footballLeagues = leagues.filter(l => l.sport === 'football' && is2026(l));
   const visibleLeagues  = sportTab === 'football' ? footballLeagues : cricketLeagues;
+
+  // Mark leagues whose season has already finished (completed matches, none upcoming/live)
+  const endedMap = useLeaguesEndedMap(cricketLeagues.map(l => l.id));
 
   return (
     <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
@@ -146,6 +150,7 @@ export function LeagueSheet({ visible, onClose, initialSport, onSelect }: Props)
                   key={String(l.leagueId ?? l.id)}
                   league={l}
                   selected={current.id === l.id}
+                  ended={!!endedMap[l.id]}
                   onPress={() => handleSelect(l)}
                 />
               ))}
@@ -252,9 +257,9 @@ function InternationalRow({ onPress }: { onPress: () => void }) {
 // ── League row ────────────────────────────────────────────────────
 
 function LeagueRow({
-  league, selected, onPress,
+  league, selected, ended, onPress,
 }: {
-  league: League; selected: boolean; onPress: () => void;
+  league: League; selected: boolean; ended?: boolean; onPress: () => void;
 }) {
   return (
     <Pressable
@@ -282,9 +287,22 @@ function LeagueRow({
 
       {/* Name + meta */}
       <View style={{ flex: 1 }}>
-        <Text style={{ color: colors.textPrimary, fontSize: font.sm, fontWeight: '700' }}>
-          {league.name}
-        </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <Text style={{ color: colors.textPrimary, fontSize: font.sm, fontWeight: '700' }}>
+            {league.name}
+          </Text>
+          {ended && (
+            <View style={{
+              backgroundColor: colors.textMuted + '18', borderRadius: 8,
+              paddingHorizontal: 6, paddingVertical: 1,
+              borderWidth: 1, borderColor: colors.border,
+            }}>
+              <Text style={{ color: colors.textMuted, fontSize: 9, fontWeight: '800', letterSpacing: 0.5 }}>
+                ENDED
+              </Text>
+            </View>
+          )}
+        </View>
         <Text style={{ color: colors.accent, fontSize: font.xs, fontWeight: '600', marginTop: 2 }}>
           {league.country} · {league.season}
         </Text>

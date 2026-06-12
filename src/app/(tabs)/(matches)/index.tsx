@@ -37,6 +37,8 @@ import { useLeague, useIsFootball } from '@/contexts/LeagueContext';
 import { useLiveScores, type LiveScore } from '@/hooks/useLiveScores';
 import type { FootballMatch } from '@/types/football';
 import { dedupeMatches, type AdaptedMatch } from '@/utils/matchAdapter';
+import { LeagueSwitcher } from '@/components/LeagueSwitcher';
+import { LeaguePickerGate } from '@/components/LeaguePickerGate';
 import { colors, spacing, font, radius } from '@/constants/theme';
 import { getTeamColor, getTeamLogo } from '@/theme/colors';
 import type { StandingsRow } from '@/services/matchService';
@@ -1108,6 +1110,8 @@ function FootballMatchesScreen() {
             )}
           </View>
 
+          <LeagueSwitcher style={{ marginTop: spacing.md }} />
+
           {/* Tab bar */}
           <TabBar
             active={tab}
@@ -1297,6 +1301,8 @@ function CricketMatchesScreen() {
         )}
       </View>
 
+      <LeagueSwitcher style={{ marginTop: spacing.md }} />
+
       {/* Tab bar */}
       <TabBar active={tab} onPress={setTab} liveCount={liveCount} tabs={TABS} />
 
@@ -1392,5 +1398,9 @@ function CricketMatchesScreen() {
 
 export default function MatchesScreen() {
   const isFootball = useIsFootball();
-  return isFootball ? <FootballMatchesScreen /> : <CricketMatchesScreen />;
+  return (
+    <LeaguePickerGate>
+      {isFootball ? <FootballMatchesScreen /> : <CricketMatchesScreen />}
+    </LeaguePickerGate>
+  );
 }

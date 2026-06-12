@@ -10,16 +10,20 @@ import { useHomeFeed } from '@/hooks/useHomeFeed';
 import { useWCHistoryStats } from '@/hooks/useWCHistoryStats';
 import { useFootballTips } from '@/hooks/useFootballTips';
 import { useWC2026Groups } from '@/hooks/useWC2026Groups';
-import { useHomeNews } from '@/hooks/useHome';
+import { useHomeNews, useHomeRankings } from '@/hooks/useHome';
+import { useTipsList } from '@/hooks/useTips';
+import { useLeagueTable } from '@/hooks/useMatches';
 import type { SportTab } from '@/components/LeagueSheet';
 import { GroupTable } from '@/components/GroupTable';
+import { BannerCarousel } from '@/components/BannerCarousel';
 import { colors, spacing, font, radius } from '@/constants/theme';
 import {
   C_CRICKET, C_FOOTBALL, C_LIVE,
   isToday, greeting, fmtDate,
   SectionHeader, EmptyCard, SportPill,
-  CricketMatchCard, FootballMatchCard, NewsCard, AIPickCard, WCCountdownBanner,
-  WC_FACTS, fbFlag, WCStatCard, FactCard,
+  CricketMatchCard, FootballMatchCard, NewsCard, AIPickCard, CricketPickCard,
+  MiniStandingsTable, WCCountdownBanner,
+  WC_FACTS, CRICKET_FACTS, fbFlag, WCStatCard, FactCard, RankingTeamCard, RankingPlayerCard,
   type StatCard,
 } from '@/components/home/HomeShared';
 
@@ -53,11 +57,12 @@ function LeagueCard({ emoji, title, subtitle, color, onPress }: {
 interface Props {
   onOpenLeagueSheet: (sport?: SportTab) => void;
   onOpenDrawer:      () => void;
+  onNavigateLeagueHome: (slug: string) => void;
 }
 
-export default function DiscoveryScreen({ onOpenLeagueSheet, onOpenDrawer }: Props) {
+export default function DiscoveryScreen({ onOpenLeagueSheet, onOpenDrawer, onNavigateLeagueHome }: Props) {
   const router          = useRouter();
-  const { setLeagueId } = useLeague();
+  const { league, setLeagueId } = useLeague();
   const { unreadCount } = useNotificationBadge();
 
   const { cricket, football, isLoading, isRefetching, refetch } = useHomeFeed();
@@ -65,6 +70,9 @@ export default function DiscoveryScreen({ onOpenLeagueSheet, onOpenDrawer }: Pro
   const { data: tips = [] }  = useFootballTips();
   const { data: groups }     = useWC2026Groups();
   const { data: news = [] }  = useHomeNews();
+  const { data: cricketTips = [] } = useTipsList();
+  const { data: standings = [] }   = useLeagueTable();
+  const { data: rankings }         = useHomeRankings();
 
   // Partition by today / upcoming
   const cLive      = cricket.live;
@@ -124,12 +132,21 @@ export default function DiscoveryScreen({ onOpenLeagueSheet, onOpenDrawer }: Pro
     },
   ] : [];
 
-  // Pick 2 rotating facts by day
-  const factStart = new Date().getDate() % WC_FACTS.length;
-  const todayFacts = [WC_FACTS[factStart], WC_FACTS[(factStart + 1) % WC_FACTS.length]];
+  // Pick 2 rotating facts by day, sport-aware
+  const factsSource = league.sport === 'cricket' ? CRICKET_FACTS : WC_FACTS;
+  const factStart = new Date().getDate() % factsSource.length;
+  const todayFacts = [factsSource[factStart], factsSource[(factStart + 1) % factsSource.length]];
 
   // Top 2 football tips for upcoming matches
   const upcomingTips = tips.filter(t => t.status === 'upcoming' && t.tip).slice(0, 2);
+
+  // Top 2 cricket tips for upcoming matches (active league)
+  const upcomingCricketTips = cricketTips.filter(t => t.status === 'upcoming' && t.tip).slice(0, 2);
+
+  // ICC T20I team rankings (top 5) + top-ranked batsman/bowler
+  const rankingTeams = rankings?.rankings?.t20i_men?.slice(0, 5) ?? [];
+  const topBatsman = rankings?.batsmen?.[0] ?? null;
+  const topBowler  = rankings?.bowlers?.[0] ?? null;
 
   // Group standings preview (first 2)
   const groupPairs = groups
@@ -142,6 +159,8 @@ export default function DiscoveryScreen({ onOpenLeagueSheet, onOpenDrawer }: Pro
   function goToCricket()  { setLeagueId('ipl');    router.push('/(tabs)/(matches)'); }
   function goToFootball() { setLeagueId('wc2026'); router.push('/(tabs)/(matches)'); }
   function goToTips()     { router.push('/(tabs)/(tips)'); }
+  function goToMatches()  { setLeagueId(league.id); router.push('/(tabs)/(matches)'); }
+  function goToTip(id: string) { router.push(`/(tip-detail)/${id}` as any); }
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
@@ -169,7 +188,7 @@ export default function DiscoveryScreen({ onOpenLeagueSheet, onOpenDrawer }: Pro
             </View>
             <View style={{ flexDirection: 'row', gap: spacing.sm, alignItems: 'center' }}>
               <Pressable
-                onPress={() => router.push('/(tabs)/(profile)/notifications' as any)}
+                onPress={() => router.push('/(settings)/notifications' as any)}
                 style={({ pressed }) => ({
                   opacity: pressed ? 0.7 : 1,
                   width: 38, height: 38, borderRadius: 19,
@@ -196,8 +215,8 @@ export default function DiscoveryScreen({ onOpenLeagueSheet, onOpenDrawer }: Pro
 
           {/* ── Sport pills ────────────────────────── */}
           <View style={{ flexDirection: 'row', gap: spacing.sm, alignItems: 'center', marginBottom: spacing.xl }}>
-            <SportPill emoji="🏏" label="Cricket"  color={C_CRICKET}  textColor="#101400" onPress={() => onOpenLeagueSheet('cricket')}  />
-            <SportPill emoji="⚽" label="Football" color={C_FOOTBALL} textColor="#FFFFFF" onPress={() => onOpenLeagueSheet('football')} />
+            <SportPill emoji="🏏" label="Cricket"  color={C_CRICKET}  textColor="#101400" active={league.sport === 'cricket'}  onPress={() => onOpenLeagueSheet('cricket')}  />
+            <SportPill emoji="⚽" label="Football" color={C_FOOTBALL} textColor="#FFFFFF" active={league.sport === 'football'} onPress={() => onOpenLeagueSheet('football')} />
             <View style={{ flex: 1 }} />
             <Pressable
               onPress={() => onOpenLeagueSheet()}
@@ -212,6 +231,9 @@ export default function DiscoveryScreen({ onOpenLeagueSheet, onOpenDrawer }: Pro
               <Text style={{ color: colors.textSecondary, fontSize: font.xs }}>All Leagues</Text>
             </Pressable>
           </View>
+
+          {/* ── Banners ────────────────────────────── */}
+          <BannerCarousel placement="discovery" onNavigateLeagueHome={onNavigateLeagueHome} />
 
           {/* ── Live Now ───────────────────────────── */}
           {totalLive > 0 && (
@@ -242,13 +264,58 @@ export default function DiscoveryScreen({ onOpenLeagueSheet, onOpenDrawer }: Pro
             </View>
           )}
 
-          {/* ── AI Picks ───────────────────────────── */}
-          {upcomingTips.length > 0 && (
+          {/* ── PredictX Picks ───────────────────────── */}
+          {league.sport === 'cricket' ? (
+            upcomingCricketTips.length > 0 && (
+              <View style={{ marginBottom: spacing.xl }}>
+                <SectionHeader emoji="🤖" title="PredictX Picks" onMore={goToTips} moreLabel="All picks →" />
+                {upcomingCricketTips.map(t => (
+                  <CricketPickCard key={t.id} match={t} onPress={() => goToTip(t.id)} />
+                ))}
+              </View>
+            )
+          ) : (
+            upcomingTips.length > 0 && (
+              <View style={{ marginBottom: spacing.xl }}>
+                <SectionHeader emoji="🤖" title="PredictX Picks" onMore={goToTips} moreLabel="All picks →" />
+                {upcomingTips.map(t => (
+                  <AIPickCard key={t.id} tip={t} onPress={goToFootball} />
+                ))}
+              </View>
+            )
+          )}
+
+          {/* ── Points Table ───────────────────────── */}
+          {league.sport === 'cricket' && standings.length > 0 && (
             <View style={{ marginBottom: spacing.xl }}>
-              <SectionHeader emoji="🤖" title="PredictX Picks" onMore={goToTips} moreLabel="All picks →" />
-              {upcomingTips.map(t => (
-                <AIPickCard key={t.id} tip={t} onPress={goToFootball} />
-              ))}
+              <SectionHeader emoji="🏆" title="Points Table" onMore={goToMatches} moreLabel="Full table →" />
+              <MiniStandingsTable rows={standings} limit={4} />
+            </View>
+          )}
+
+          {/* ── ICC Rankings ───────────────────────── */}
+          {league.sport === 'cricket' && rankingTeams.length > 0 && (
+            <View style={{ marginBottom: spacing.xl }}>
+              <SectionHeader
+                emoji="🏆"
+                title="ICC T20I Rankings"
+                onMore={() => router.push('/(tabs)/(matches)/rankings' as any)}
+                moreLabel="Full rankings →"
+              />
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={{ marginHorizontal: -spacing.lg, marginBottom: spacing.sm }}
+                contentContainerStyle={{ paddingHorizontal: spacing.lg, gap: 10 }}
+              >
+                {rankingTeams.map(t => <RankingTeamCard key={t.id || `${t.rank}-${t.code}`} team={t} />)}
+              </ScrollView>
+              {(topBatsman || topBowler) && (
+                <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+                  {topBatsman && <RankingPlayerCard player={topBatsman} label="Top Batsman" />}
+                  {topBowler  && <RankingPlayerCard player={topBowler}  label="Top Bowler" />}
+                </View>
+              )}
             </View>
           )}
 

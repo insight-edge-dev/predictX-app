@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useRouter } from 'expo-router';
 import { LeagueSheet, type SportTab } from '@/components/LeagueSheet';
 import { SideDrawer } from '@/components/SideDrawer';
-import type { League } from '@/contexts/LeagueContext';
+import { useLeague, type League } from '@/contexts/LeagueContext';
 import DiscoveryScreen from './DiscoveryScreen';
 import LeagueHomeScreen from './LeagueHomeScreen';
 
@@ -10,6 +10,7 @@ type HomeView = 'discovery' | 'league';
 
 export default function HomeRouter() {
   const router = useRouter();
+  const { setLeagueId } = useLeague();
   const [homeView,  setHomeView]  = useState<HomeView>('discovery');
   const [sheetOpen, setSheetOpen] = useState(false);
   const [sheetSport, setSheetSport] = useState<SportTab | undefined>(undefined);
@@ -47,6 +48,11 @@ export default function HomeRouter() {
     setHomeView('discovery');
   }
 
+  function goToLeagueHome(slug: string) {
+    setLeagueId(slug);
+    setHomeView('league');
+  }
+
   return (
     <>
       <LeagueSheet
@@ -71,6 +77,7 @@ export default function HomeRouter() {
         <DiscoveryScreen
           onOpenLeagueSheet={openLeagueSheet}
           onOpenDrawer={() => setDrawerOpen(true)}
+          onNavigateLeagueHome={goToLeagueHome}
         />
       )}
     </>

@@ -32,16 +32,24 @@ export const FALLBACK_LEAGUES: League[] = [
 export type LeagueId = string;
 
 interface LeagueContextValue {
-  league:      League;
-  leagues:     League[];
-  setLeagueId: (id: LeagueId) => void;
+  league:             League;
+  leagues:            League[];
+  setLeagueId:        (id: LeagueId) => void;
+  /** True once the user has explicitly picked a league (vs. just the default). */
+  hasSelectedLeague:  boolean;
 }
 
 const LeagueContext = createContext<LeagueContextValue | null>(null);
 
 export function LeagueProvider({ children }: { children: React.ReactNode }) {
-  const [leagueId, setLeagueId] = useState<LeagueId>('ipl');
-  const [leagues,  setLeagues]  = useState<League[]>(FALLBACK_LEAGUES);
+  const [leagueId, setLeagueIdRaw] = useState<LeagueId>('ipl');
+  const [leagues,  setLeagues]     = useState<League[]>(FALLBACK_LEAGUES);
+  const [hasSelectedLeague, setHasSelectedLeague] = useState(false);
+
+  function setLeagueId(id: LeagueId) {
+    setLeagueIdRaw(id);
+    setHasSelectedLeague(true);
+  }
 
   // Fetch full league list from backend as soon as the app starts.
   // Runs inside the provider so it fires before any screen mounts.
@@ -78,7 +86,7 @@ export function LeagueProvider({ children }: { children: React.ReactNode }) {
   const league = leagues.find(l => l.id === leagueId) ?? leagues[0];
 
   return (
-    <LeagueContext.Provider value={{ league, leagues, setLeagueId }}>
+    <LeagueContext.Provider value={{ league, leagues, setLeagueId, hasSelectedLeague }}>
       {children}
     </LeagueContext.Provider>
   );

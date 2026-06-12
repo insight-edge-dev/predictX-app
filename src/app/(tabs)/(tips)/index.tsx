@@ -16,6 +16,9 @@ import { colors, spacing, font, radius } from '@/constants/theme';
 import { useLeague, useIsFootball } from '@/contexts/LeagueContext';
 import { PredictionCardSkeleton } from '@/components/Skeleton';
 import { FootballProbabilityBar } from '@/components/FootballProbabilityBar';
+import { TeamCrest } from '@/components/TeamCrest';
+import { LeagueSwitcher } from '@/components/LeagueSwitcher';
+import { LeaguePickerGate } from '@/components/LeaguePickerGate';
 import type { MatchWithTip } from '@/services/tipsService';
 import type { FootballMatchWithTip } from '@/types/football';
 
@@ -244,11 +247,7 @@ function FootballTipCard({ match, onPress }: { match: FootballMatchWithTip; onPr
           <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: spacing.lg }}>
             <View style={{ flex: 1, alignItems: 'center', gap: 8 }}>
               <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: hColor + '12', borderWidth: 1.5, borderColor: hColor + '40', alignItems: 'center', justifyContent: 'center' }}>
-                {match.homeTeam.logo ? (
-                  <Image source={{ uri: match.homeTeam.logo }} style={{ width: 44, height: 44 }} resizeMode="contain" />
-                ) : (
-                  <Text style={{ fontSize: 28 }}>{match.homeTeam.flag}</Text>
-                )}
+                <TeamCrest logo={match.homeTeam.logo} flag={match.homeTeam.flag} size={44} />
               </View>
               <Text style={{ color: colors.textPrimary, fontSize: font.base, fontWeight: '800' }}>{match.homeTeam.shortName}</Text>
               <Text style={{ fontSize: 28, fontWeight: '900', letterSpacing: -1, color: tip?.winner === match.homeTeam.shortName ? hColor : colors.textSecondary }}>
@@ -266,11 +265,7 @@ function FootballTipCard({ match, onPress }: { match: FootballMatchWithTip; onPr
 
             <View style={{ flex: 1, alignItems: 'center', gap: 8 }}>
               <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: aColor + '12', borderWidth: 1.5, borderColor: aColor + '40', alignItems: 'center', justifyContent: 'center' }}>
-                {match.awayTeam.logo ? (
-                  <Image source={{ uri: match.awayTeam.logo }} style={{ width: 44, height: 44 }} resizeMode="contain" />
-                ) : (
-                  <Text style={{ fontSize: 28 }}>{match.awayTeam.flag}</Text>
-                )}
+                <TeamCrest logo={match.awayTeam.logo} flag={match.awayTeam.flag} size={44} />
               </View>
               <Text style={{ color: colors.textPrimary, fontSize: font.base, fontWeight: '800' }}>{match.awayTeam.shortName}</Text>
               <Text style={{ fontSize: 28, fontWeight: '900', letterSpacing: -1, color: tip?.winner === match.awayTeam.shortName ? aColor : colors.textSecondary }}>
@@ -353,9 +348,12 @@ function Header({ count }: { count: number }) {
         <Text style={{ color: colors.accent, fontSize: font.xs, fontWeight: '700', letterSpacing: 2 }}>{league.short} {league.season}</Text>
         <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
       </View>
-      <Text style={{ color: colors.textPrimary, fontSize: 28, fontWeight: '900', letterSpacing: -0.8, marginBottom: 6 }}>
-        PredictX
-      </Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.md }}>
+        <Text style={{ color: colors.textPrimary, fontSize: 28, fontWeight: '900', letterSpacing: -0.8 }}>
+          PredictX
+        </Text>
+        <LeagueSwitcher />
+      </View>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
         <View style={{
           flexDirection: 'row', alignItems: 'center', gap: 5,
@@ -464,9 +462,12 @@ function FootballTipsScreen() {
                   <Text style={{ color: colors.accent, fontSize: font.xs, fontWeight: '700', letterSpacing: 2 }}>⚽ FIFA WORLD CUP 2026</Text>
                   <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
                 </View>
-                <Text style={{ color: colors.textPrimary, fontSize: 28, fontWeight: '900', letterSpacing: -0.8, marginBottom: 6 }}>
-                  PredictX
-                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.md }}>
+                  <Text style={{ color: colors.textPrimary, fontSize: 28, fontWeight: '900', letterSpacing: -0.8 }}>
+                    PredictX
+                  </Text>
+                  <LeagueSwitcher />
+                </View>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: colors.success + '15', borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4, borderWidth: 1, borderColor: colors.success + '30' }}>
                     <View style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: colors.success }} />
@@ -527,9 +528,12 @@ function CricketTipsScreen() {
             <Text style={{ color: colors.accent, fontSize: font.xs, fontWeight: '700', letterSpacing: 2, marginBottom: 6 }}>
               {league.short} {league.season}
             </Text>
-            <Text style={{ color: colors.textPrimary, fontSize: 28, fontWeight: '900', letterSpacing: -0.8 }}>
-              PredictX
-            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Text style={{ color: colors.textPrimary, fontSize: 28, fontWeight: '900', letterSpacing: -0.8 }}>
+                PredictX
+              </Text>
+              <LeagueSwitcher />
+            </View>
           </View>
           <SeasonEndedState />
         </SafeAreaView>
@@ -570,5 +574,9 @@ function CricketTipsScreen() {
 
 export default function TipsScreen() {
   const isFootball = useIsFootball();
-  return isFootball ? <FootballTipsScreen /> : <CricketTipsScreen />;
+  return (
+    <LeaguePickerGate>
+      {isFootball ? <FootballTipsScreen /> : <CricketTipsScreen />}
+    </LeaguePickerGate>
+  );
 }

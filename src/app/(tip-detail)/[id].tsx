@@ -9,6 +9,7 @@ import { useMatchTip } from '@/hooks/useTips';
 import { useFootballMatchTip } from '@/hooks/useFootballTips';
 import { useIsFootball } from '@/contexts/LeagueContext';
 import { FootballProbabilityBar } from '@/components/FootballProbabilityBar';
+import { TeamCrest } from '@/components/TeamCrest';
 import { getTeamColor, getTeamLogo } from '@/theme/colors';
 import { formatMatchDate } from '@/utils/date';
 import { colors, spacing, font, radius } from '@/constants/theme';
@@ -216,13 +217,8 @@ function SkeletonBlock({ h = 16, br = 6, mb = 8, w = '100%' }: any) {
 
 // ── Football: Team badge (logo or flag fallback) ─────────────
 
-function FootballTeamBadge({ logo, flag, shortName, color, size }: { logo: string; flag: string; shortName: string; color: string; size: number }) {
-  if (logo) return <Image source={{ uri: logo }} style={{ width: size, height: size }} resizeMode="contain" />;
-  return (
-    <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: color + '20', alignItems: 'center', justifyContent: 'center' }}>
-      <Text style={{ fontSize: size * 0.4 }}>{flag}</Text>
-    </View>
-  );
+function FootballTeamBadge({ logo, flag, size }: { logo: string; flag: string; shortName: string; color: string; size: number }) {
+  return <TeamCrest logo={logo} flag={flag} size={size} />;
 }
 
 // ── Football: Factor row (home/away, two-way advantage) ──────

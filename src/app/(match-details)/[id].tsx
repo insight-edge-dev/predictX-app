@@ -33,6 +33,7 @@ import { useFootballMatchDetail } from '@/hooks/useFootballMatches';
 import { useFootballMatchTip } from '@/hooks/useFootballTips';
 import { useIsFootball } from '@/contexts/LeagueContext';
 import { FootballProbabilityBar } from '@/components/FootballProbabilityBar';
+import { TeamCrest } from '@/components/TeamCrest';
 import { type FullMatch } from '@/services/matchService';
 import type { FootballMatch } from '@/types/football';
 import { colors, spacing, font, radius } from '@/constants/theme';
@@ -1965,13 +1966,8 @@ function CricketMatchDetailScreen() {
 
 // ── Football: Team crest (logo or flag fallback) ─────────────
 
-function FootballTeamCrest({ logo, flag, color, size }: { logo: string; flag: string; color: string; size: number }) {
-  if (logo) return <Image source={{ uri: logo }} style={{ width: size, height: size }} resizeMode="contain" />;
-  return (
-    <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: color + '20', alignItems: 'center', justifyContent: 'center' }}>
-      <Text style={{ fontSize: size * 0.4 }}>{flag}</Text>
-    </View>
-  );
+function FootballTeamCrest({ logo, flag, size }: { logo: string; flag: string; color: string; size: number }) {
+  return <TeamCrest logo={logo} flag={flag} size={size} />;
 }
 
 // ── Football: Score header ────────────────────────────────────

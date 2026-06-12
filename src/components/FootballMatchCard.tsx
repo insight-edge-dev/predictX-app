@@ -1,4 +1,4 @@
-import { View, Text, Pressable, Image, Animated } from 'react-native';
+import { View, Text, Pressable, Animated } from 'react-native';
 import { memo, useRef, useEffect } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -6,6 +6,7 @@ import { useRouter } from 'expo-router';
 import type { FootballMatch, WCStage } from '@/types/football';
 import { colors, spacing, font, radius } from '@/constants/theme';
 import { PredictionBadge } from '@/components/MatchCard';
+import { TeamCrest } from '@/components/TeamCrest';
 
 // ── Pulsing live dot ──────────────────────────────────────────────
 
@@ -58,13 +59,9 @@ function TeamColumn({
 }) {
   return (
     <View style={{ flex: 1, alignItems: 'center', gap: 6 }}>
-      {logo ? (
-        <Image source={{ uri: logo }} style={{ width: 44, height: 44 }} resizeMode="contain" />
-      ) : (
-        <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: color + '18', alignItems: 'center', justifyContent: 'center' }}>
-          <Text style={{ fontSize: 18 }}>{flag}</Text>
-        </View>
-      )}
+      <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: color + '18', alignItems: 'center', justifyContent: 'center' }}>
+        <TeamCrest logo={logo} flag={flag} size={36} />
+      </View>
       <Text style={{ color: isWinner ? colors.textPrimary : colors.textSecondary, fontSize: font.sm, fontWeight: isWinner ? '700' : '500' }} numberOfLines={1}>
         {flag} {shortName}
       </Text>

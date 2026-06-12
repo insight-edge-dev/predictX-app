@@ -13,7 +13,7 @@
  *   useCachedMatch(id)        — synchronous cache lookup (no network)
  */
 
-import { useQuery, type UseQueryResult } from '@tanstack/react-query';
+import { useQuery, useQueries, type UseQueryResult } from '@tanstack/react-query';
 import { useRef, useCallback } from 'react';
 import {
   getLeagueMatches,
@@ -179,4 +179,30 @@ export function useFullMatch(id: string) {
 
 export function useCachedMatch(matchId: string): Match | null {
   return getMatchFromCache(matchId);
+}
+
+// ── useLeaguesEndedMap ────────────────────────────────────────
+//
+// For a list of league slugs, returns a map of slug -> whether that
+// league's season has ended (has completed matches but no live/upcoming).
+// Used by the league picker to badge finished seasons.
+
+export function useLeaguesEndedMap(slugs: string[]): Record<string, boolean> {
+  const results = useQueries({
+    queries: slugs.map((slug) => ({
+      queryKey:             [`${slug}:matches`],
+      queryFn:              () => getLeagueMatches(slug),
+      staleTime:            15 * 60_000,
+      refetchOnMount:       false,
+      refetchOnWindowFocus: false,
+      retry:                0,
+    })),
+  });
+
+  const map: Record<string, boolean> = {};
+  slugs.forEach((slug, i) => {
+    const data = results[i]?.data;
+    map[slug] = !!data && data.live.length === 0 && data.upcoming.length === 0 && data.completed.length > 0;
+  });
+  return map;
 }

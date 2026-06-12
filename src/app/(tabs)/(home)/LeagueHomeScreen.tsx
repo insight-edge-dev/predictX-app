@@ -15,6 +15,7 @@ import { useWC2026Groups } from '@/hooks/useWC2026Groups';
 import { useWCHistoryStats } from '@/hooks/useWCHistoryStats';
 import type { SportTab } from '@/components/LeagueSheet';
 import { GroupTable } from '@/components/GroupTable';
+import { BannerCarousel } from '@/components/BannerCarousel';
 import { colors, spacing, font, radius } from '@/constants/theme';
 import {
   C_CRICKET, C_FOOTBALL, C_LIVE,
@@ -61,7 +62,7 @@ function LeagueHomeHeader({ onOpenLeagueSheet, onOpenDrawer, onBackToDiscovery }
         </View>
         <View style={{ flexDirection: 'row', gap: spacing.sm, alignItems: 'center' }}>
           <Pressable
-            onPress={() => router.push('/(tabs)/(profile)/notifications' as any)}
+            onPress={() => router.push('/(settings)/notifications' as any)}
             style={({ pressed }) => ({
               opacity: pressed ? 0.7 : 1,
               width: 38, height: 38, borderRadius: 19,
@@ -102,10 +103,13 @@ function LeagueHomeHeader({ onOpenLeagueSheet, onOpenDrawer, onBackToDiscovery }
         </View>
       </View>
 
+      {/* ── Banners ────────────────────────────── */}
+      <BannerCarousel placement={league.id} />
+
       {/* ── Sport pills ────────────────────────── */}
       <View style={{ flexDirection: 'row', gap: spacing.sm, alignItems: 'center', marginBottom: spacing.xl }}>
-        <SportPill emoji="🏏" label="Cricket"  color={C_CRICKET}  textColor="#101400" onPress={() => onOpenLeagueSheet('cricket')}  />
-        <SportPill emoji="⚽" label="Football" color={C_FOOTBALL} textColor="#FFFFFF" onPress={() => onOpenLeagueSheet('football')} />
+        <SportPill emoji="🏏" label="Cricket"  color={C_CRICKET}  textColor="#101400" active={league.sport === 'cricket'}  onPress={() => onOpenLeagueSheet('cricket')}  />
+        <SportPill emoji="⚽" label="Football" color={C_FOOTBALL} textColor="#FFFFFF" active={league.sport === 'football'} onPress={() => onOpenLeagueSheet('football')} />
         <View style={{ flex: 1 }} />
         <Pressable
           onPress={onBackToDiscovery}

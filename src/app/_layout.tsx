@@ -8,6 +8,7 @@ import { LeagueProvider } from "@/contexts/LeagueContext";
 import { NotificationBadgeProvider } from "@/contexts/NotificationBadgeContext";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import OfflineBanner from "@/components/OfflineBanner";
+import { colors } from "@/constants/theme";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -29,12 +30,12 @@ export default function RootLayout() {
         <LeagueProvider>
         <NotificationBadgeProvider>
         <AuthProvider>
-          <StatusBar style="light" />
-          <View style={{ flex: 1, backgroundColor: "#0B0B0B" }}>
+          <StatusBar style="dark" />
+          <View style={{ flex: 1, backgroundColor: colors.bg }}>
             <Stack
               screenOptions={{
                 headerShown: false,
-                contentStyle: { backgroundColor: "#0B0B0B" },
+                contentStyle: { backgroundColor: colors.bg },
               }}
             />
             <OfflineBanner />
