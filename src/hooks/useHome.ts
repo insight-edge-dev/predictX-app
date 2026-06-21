@@ -1,5 +1,7 @@
-import { useQuery } from '@tanstack/react-query';
+import { useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '@/services/api';
+import { supabase } from '@/lib/supabase';
 
 export interface ToplistPlayer {
   playerId:  string;
@@ -128,6 +130,84 @@ export function useHomeNews() {
     refetchOnWindowFocus: false,
     retry:                1,
     placeholderData:      (prev) => prev ?? [],
+  });
+}
+
+export interface HomeFact {
+  id:    string;
+  sport: 'cricket' | 'football';
+  icon:  string;
+  text:  string;
+  color: string;
+}
+
+export function useHomeFacts(sport: 'cricket' | 'football') {
+  return useQuery<HomeFact[]>({
+    queryKey:             ['home:facts', sport],
+    queryFn:              () => api.get<HomeFact[]>(`/home/facts?sport=${sport}`),
+    staleTime:            60 * 60_000,
+    refetchOnMount:       false,
+    refetchOnWindowFocus: false,
+    retry:                1,
+    placeholderData:      (prev) => prev ?? [],
+  });
+}
+
+export interface HomeSection {
+  key:           string;
+  label:         string;
+  enabled:       boolean;
+  display_order: number;
+}
+
+export function useHomeSections() {
+  return useQuery<HomeSection[]>({
+    queryKey:             ['home:sections'],
+    queryFn:              () => api.get<HomeSection[]>('/home/sections'),
+    staleTime:            15 * 60_000,
+    refetchOnMount:       false,
+    refetchOnWindowFocus: false,
+    retry:                1,
+    placeholderData:      (prev) => prev ?? [],
+  });
+}
+
+export interface Accuracy {
+  percentage:         number;
+  sampleSize:         number;
+  isOverridden:       boolean;
+  computedPercentage: number;
+}
+
+export function useAccuracy(scope?: string) {
+  const queryClient = useQueryClient();
+
+  // Admin overrides should reach the app instantly, not on the next 60s poll —
+  // mirrors the expert-predictions Realtime pattern (see matches screen).
+  useEffect(() => {
+    const channel = supabase
+      .channel(`accuracy_overrides_${Math.random().toString(36).slice(2)}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'accuracy_overrides' }, () => {
+        queryClient.invalidateQueries({ queryKey: ['home:accuracy'] });
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [queryClient]);
+
+  return useQuery<Accuracy>({
+    queryKey:             ['home:accuracy', scope ?? 'global'],
+    queryFn:              () => api.get<Accuracy>(scope ? `/home/accuracy/${scope}` : '/home/accuracy'),
+    // Short staleTime (unlike facts/sections) — an admin override should be
+    // visible again within moments of saving it, not up to 30 minutes later.
+    staleTime:            60_000,
+    refetchOnMount:       true,
+    refetchOnWindowFocus: false,
+    // Polling fallback in case the Realtime subscription above ever misses
+    // an event (dropped connection, etc.) — caps staleness at 1 minute
+    // regardless of whether Realtime actually fired.
+    refetchInterval:      60_000,
+    retry:                1,
+    placeholderData:      (prev) => prev,
   });
 }
 

@@ -13,6 +13,8 @@ export interface League {
   format:    string;
   image?:    string;
   sport:     'cricket' | 'football';
+  /** Admin-set "featured/pinned" override — higher sorts first. 0 = no override. */
+  priority?: number;
 }
 
 export const FALLBACK_LEAGUES: League[] = [
@@ -26,7 +28,7 @@ export const FALLBACK_LEAGUES: League[] = [
   { id: 'bpl',      name: 'Bangladesh Premier League', short: 'BPL',      flag: '🟥', season: '2025/26', country: 'Bangladesh',    format: 'T20',   sport: 'cricket' },
   { id: 'csa_t20',  name: 'CSA T20 Challenge',         short: 'CSA T20',  flag: '🦁', season: '2025',    country: 'South Africa',  format: 'T20',   sport: 'cricket' },
   // Football
-  { id: 'wc2026',   name: 'FIFA World Cup 2026',       short: 'WC 2026',  flag: '🏆', season: '2026',    country: 'USA/CAN/MEX',   format: '90min', sport: 'football' },
+  { id: 'wc2026',   name: 'FIFA World Cup 2026',       short: 'WC',       flag: '🏆', season: '2026',    country: 'USA/CAN/MEX',   format: '90min', sport: 'football' },
 ];
 
 export type LeagueId = string;
@@ -37,6 +39,8 @@ interface LeagueContextValue {
   setLeagueId:        (id: LeagueId) => void;
   /** True once the user has explicitly picked a league (vs. just the default). */
   hasSelectedLeague:  boolean;
+  /** Drops back to the cross-league "All" scope (Discovery, All Matches, All PredictX). */
+  clearLeagueSelection: () => void;
 }
 
 const LeagueContext = createContext<LeagueContextValue | null>(null);
@@ -49,6 +53,10 @@ export function LeagueProvider({ children }: { children: React.ReactNode }) {
   function setLeagueId(id: LeagueId) {
     setLeagueIdRaw(id);
     setHasSelectedLeague(true);
+  }
+
+  function clearLeagueSelection() {
+    setHasSelectedLeague(false);
   }
 
   // Fetch full league list from backend as soon as the app starts.
@@ -69,6 +77,7 @@ export function LeagueProvider({ children }: { children: React.ReactNode }) {
           format:   l.format  ?? 'T20',
           image:    l.image,
           sport:    (l.sport === 'football' ? 'football' : 'cricket') as 'cricket' | 'football',
+          priority: l.priority ?? 0,
         }));
         // Deduplicate by id in case backend sends collisions
         const seen = new Set<string>();
@@ -86,7 +95,7 @@ export function LeagueProvider({ children }: { children: React.ReactNode }) {
   const league = leagues.find(l => l.id === leagueId) ?? leagues[0];
 
   return (
-    <LeagueContext.Provider value={{ league, leagues, setLeagueId, hasSelectedLeague }}>
+    <LeagueContext.Provider value={{ league, leagues, setLeagueId, hasSelectedLeague, clearLeagueSelection }}>
       {children}
     </LeagueContext.Provider>
   );

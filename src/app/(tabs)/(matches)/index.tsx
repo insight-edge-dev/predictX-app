@@ -27,13 +27,16 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { MatchCard } from '@/components/MatchCard';
 import { MatchCardSkeleton } from '@/components/MatchCardSkeleton';
 import { FootballMatchCard } from '@/components/FootballMatchCard';
+import { CricketMatchCard, FootballMatchCard as FootballMatchCardCompact, SectionHeader, EmptyCard, C_CRICKET_TAG, C_LIVE, LeagueLogo, TeamBadge, PulsingDot, AccuracyBadge } from '@/components/home/HomeShared';
+import { useAccuracy } from '@/hooks/useHome';
 import { GroupTable } from '@/components/GroupTable';
 import { useMatchCategories, useIPLFixtures, useIPLTable } from '@/hooks/useMatches';
 import { useFootballMatches } from '@/hooks/useFootballMatches';
 import { useFootballTips } from '@/hooks/useFootballTips';
 import { useWC2026Groups } from '@/hooks/useWC2026Groups';
 import { useTipsList } from '@/hooks/useTips';
-import { useLeague, useIsFootball } from '@/contexts/LeagueContext';
+import { useAllMatches, type AllMatchItem } from '@/hooks/useAllMatches';
+import { useLeague, useIsFootball, type League } from '@/contexts/LeagueContext';
 import { useLiveScores, type LiveScore } from '@/hooks/useLiveScores';
 import type { FootballMatch } from '@/types/football';
 import { dedupeMatches, type AdaptedMatch } from '@/utils/matchAdapter';
@@ -877,8 +880,9 @@ function PreTournamentBanner() {
 
 const FOOTBALL_GREEN = '#16A34A';
 
-function FootballMatchesScreen() {
-  const { league } = useLeague();
+function FootballMatchesScreen({ initialTab }: { initialTab?: FootballTab | null } = {}) {
+  const { league, clearLeagueSelection } = useLeague();
+  const { data: accuracy } = useAccuracy(league.id);
   const {
     liveMatches,
     upcomingMatches,
@@ -923,7 +927,7 @@ function FootballMatchesScreen() {
   const preTournament   = !isLoading && liveCount === 0 && upcomingMatches.length === 0 && completedMatches.length === 0;
   const leagueComplete  = !isLoading && liveCount === 0 && upcomingMatches.length === 0 && completedMatches.length > 0;
 
-  const [tab, setTab] = useState<FootballTab>(() => (liveCount > 0 ? 'Live' : 'Groups'));
+  const [tab, setTab] = useState<FootballTab>(() => initialTab ?? (liveCount > 0 ? 'Live' : 'Groups'));
 
   useEffect(() => {
     if (leagueComplete) setTab('Results');
@@ -1092,6 +1096,11 @@ function FootballMatchesScreen() {
               <Text style={{ color: colors.textSecondary, fontSize: font.sm, marginTop: 2 }}>
                 Fixtures · Results · Groups
               </Text>
+              {accuracy && (
+                <View style={{ marginTop: 6 }}>
+                  <AccuracyBadge percentage={accuracy.percentage} sampleSize={accuracy.sampleSize} compact />
+                </View>
+              )}
             </View>
             {liveCount > 0 && (
               <Pressable onPress={() => setTab('Live')} style={({ pressed }) => ({ opacity: pressed ? 0.8 : 1 })}>
@@ -1110,7 +1119,10 @@ function FootballMatchesScreen() {
             )}
           </View>
 
-          <LeagueSwitcher style={{ marginTop: spacing.md }} />
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.md }}>
+            <BackToAllPill label="All Matches" onPress={clearLeagueSelection} />
+            <LeagueSwitcher />
+          </View>
 
           {/* Tab bar */}
           <TabBar
@@ -1131,9 +1143,10 @@ function FootballMatchesScreen() {
 
 // ── Cricket matches screen ────────────────────────────────────
 
-function CricketMatchesScreen() {
+function CricketMatchesScreen({ initialTab }: { initialTab?: Tab | null } = {}) {
   const router = useRouter();
-  const { league } = useLeague();
+  const { league, clearLeagueSelection } = useLeague();
+  const { data: accuracy } = useAccuracy(league.id);
 
   const {
     liveMatches,
@@ -1147,7 +1160,7 @@ function CricketMatchesScreen() {
 
   // Auto-switch to Results when the league is over
   const leagueComplete = !isLoading && liveMatches.length === 0 && upcomingMatches.length === 0 && completedMatches.length > 0;
-  const [tab, setTab] = useState<Tab>('Fixtures');
+  const [tab, setTab] = useState<Tab>(initialTab ?? 'Fixtures');
   // Switch default tab when leagueComplete becomes true
   const didAutoSwitch = useRef(false);
   useEffect(() => {
@@ -1283,6 +1296,11 @@ function CricketMatchesScreen() {
           <Text style={{ color: colors.accent, fontSize: font.xs, fontWeight: '700', letterSpacing: 2, marginBottom: 4 }}>{league.short} {league.season}</Text>
           <Text style={{ color: colors.textPrimary, fontSize: 26, fontWeight: '800', letterSpacing: -0.5 }}>Matches</Text>
           <Text style={{ color: colors.textSecondary, fontSize: font.sm, marginTop: 2 }}>Schedule & results</Text>
+          {accuracy && (
+            <View style={{ marginTop: 6 }}>
+              <AccuracyBadge percentage={accuracy.percentage} sampleSize={accuracy.sampleSize} compact />
+            </View>
+          )}
         </View>
         {liveCount > 0 && (
           <Pressable onPress={() => setTab('Live')} style={({ pressed }) => ({ opacity: pressed ? 0.8 : 1 })}>
@@ -1301,7 +1319,10 @@ function CricketMatchesScreen() {
         )}
       </View>
 
-      <LeagueSwitcher style={{ marginTop: spacing.md }} />
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.md }}>
+        <BackToAllPill label="All Matches" onPress={clearLeagueSelection} />
+        <LeagueSwitcher />
+      </View>
 
       {/* Tab bar */}
       <TabBar active={tab} onPress={setTab} liveCount={liveCount} tabs={TABS} />
@@ -1394,13 +1415,565 @@ function CricketMatchesScreen() {
   );
 }
 
+// ── Inline pill back to the All-Matches feed ─────────────────────
+// Sits next to LeagueSwitcher (not floating over the header — an
+// absolutely-positioned overlay used to collide with the LIVE badge/title).
+
+function BackToAllPill({ onPress, label }: { onPress: () => void; label: string }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => ({
+        opacity: pressed ? 0.85 : 1,
+        flexDirection: 'row', alignItems: 'center', gap: 5,
+        backgroundColor: colors.card,
+        borderRadius: 20, borderWidth: 1, borderColor: colors.border,
+        paddingHorizontal: 10, paddingVertical: 7,
+      })}
+    >
+      <Ionicons name="grid-outline" size={12} color={colors.accent} />
+      <Text style={{ color: colors.accent, fontSize: font.xs, fontWeight: '700' }}>{label}</Text>
+    </Pressable>
+  );
+}
+
+// ── All Matches screen (new, separate default — cricket + football,
+//    every league merged into one feed) ──────────────────────────
+//
+// One continuous feed, no tabs: Live (if any, flat) → Upcoming → Completed.
+// Upcoming/Completed group matches by their actual league as a collapsible
+// accordion — tap the header to expand a few fixtures, with a "See all
+// fixtures in <League>" link that jumps to that league's full Matches screen.
+
+const LEAGUE_PREVIEW_COUNT = 3;
+
+interface LeagueGroup {
+  leagueId:    string;
+  leagueShort: string;
+  leagueName:  string;
+  leagueFlag:  string;
+  leagueImage?: string;
+  sportColor:  string;
+  priority:    number;
+  items:       AllMatchItem[];
+}
+
+function groupByLeague(items: AllMatchItem[], leagues: League[]): LeagueGroup[] {
+  const order: string[] = [];
+  const map = new Map<string, AllMatchItem[]>();
+  for (const item of items) {
+    if (!map.has(item.leagueId)) { map.set(item.leagueId, []); order.push(item.leagueId); }
+    map.get(item.leagueId)!.push(item);
+  }
+  const groups = order.map(leagueId => {
+    const group  = map.get(leagueId)!;
+    const league = leagues.find(l => l.id === leagueId);
+    const isFootball = group[0].kind === 'football';
+    return {
+      leagueId,
+      leagueShort: league?.short ?? group[0].leagueLabel,
+      leagueName:  league?.name  ?? group[0].leagueLabel,
+      leagueFlag:  league?.flag  ?? (isFootball ? '⚽' : '🏏'),
+      leagueImage: league?.image,
+      sportColor:  isFootball ? colors.accent : C_CRICKET_TAG,
+      priority:    league?.priority ?? 0,
+      items: group,
+    };
+  });
+  // Admin-set "featured" leagues sort first; ties keep today's existing
+  // (date-driven) order since Array.sort is stable.
+  return groups.sort((a, b) => b.priority - a.priority);
+}
+
+function LeagueAccordion({
+  leagueId, leagueShort, leagueName, leagueFlag, leagueImage, sportColor, items,
+  defaultExpanded, targetTab, onPress, onSeeAll,
+}: LeagueGroup & {
+  defaultExpanded?: boolean;
+  targetTab: 'Fixtures' | 'Results';
+  onPress: (item: AllMatchItem) => void; onSeeAll: (leagueId: string, tab: 'Fixtures' | 'Results') => void;
+}) {
+  const [expanded, setExpanded] = useState(!!defaultExpanded);
+  const preview = items.slice(0, LEAGUE_PREVIEW_COUNT);
+  const next = items[0];
+
+  return (
+    <View style={{
+      marginBottom: spacing.md, backgroundColor: colors.card, borderRadius: radius.lg,
+      borderWidth: 1, borderColor: colors.border, overflow: 'hidden',
+      shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 3,
+      elevation: 1,
+    }}>
+      <Pressable
+        onPress={() => setExpanded(v => !v)}
+        style={({ pressed }) => ({
+          opacity: pressed ? 0.85 : 1,
+          flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+          padding: spacing.md,
+        })}
+      >
+        <LeagueLogo image={leagueImage} flag={leagueFlag} color={sportColor} />
+        <View style={{ flex: 1 }}>
+          <Text style={{ color: colors.textPrimary, fontSize: font.sm, fontWeight: '800' }} numberOfLines={1}>
+            {leagueName}
+          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
+            <View style={{ backgroundColor: sportColor + '15', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 1 }}>
+              <Text style={{ color: sportColor, fontSize: 9, fontWeight: '800', letterSpacing: 0.3 }}>{leagueShort}</Text>
+            </View>
+            <Text style={{ color: colors.textMuted, fontSize: 11 }}>
+              {items.length} match{items.length !== 1 ? 'es' : ''}
+            </Text>
+          </View>
+          {!expanded && next && (
+            <Text style={{ color: colors.textMuted, fontSize: 11, marginTop: 4 }} numberOfLines={1}>
+              Next: {next.kind === 'cricket'
+                ? `${next.match.team1Short} vs ${next.match.team2Short}`
+                : `${next.match.homeTeam.shortName} vs ${next.match.awayTeam.shortName}`}
+            </Text>
+          )}
+        </View>
+        <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={18} color={colors.textMuted} />
+      </Pressable>
+
+      {expanded && (
+        <View style={{ paddingHorizontal: spacing.md, paddingBottom: spacing.md }}>
+          {preview.map(item => (
+            item.kind === 'cricket'
+              ? <CricketMatchCard key={item.match.id} match={item.match} leagueLabel={item.leagueLabel} onPress={() => onPress(item)} />
+              : <FootballMatchCardCompact key={item.match.id} match={item.match} onPress={() => onPress(item)} />
+          ))}
+          <Pressable
+            onPress={() => onSeeAll(leagueId, targetTab)}
+            style={({ pressed }) => ({
+              opacity: pressed ? 0.8 : 1,
+              flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+              backgroundColor: sportColor + '12', borderRadius: radius.md,
+              paddingVertical: spacing.sm + 2,
+            })}
+          >
+            <Text style={{ color: sportColor, fontSize: font.xs, fontWeight: '800' }}>
+              View all {items.length} fixtures in {leagueShort}
+            </Text>
+            <Ionicons name="arrow-forward" size={13} color={sportColor} />
+          </Pressable>
+        </View>
+      )}
+    </View>
+  );
+}
+
+// ── Underline tabs (Live / Fixtures / Completed) ────────────────
+
+function UnderlineTabs({ tabs, active, onSelect }: {
+  tabs: { key: string; label: string }[]; active: string; onSelect: (key: string) => void;
+}) {
+  return (
+    <View style={{
+      flexDirection: 'row', gap: spacing.xl,
+      borderBottomWidth: 1, borderBottomColor: colors.border,
+      marginBottom: spacing.lg,
+    }}>
+      {tabs.map(t => {
+        const isActive = t.key === active;
+        return (
+          <Pressable
+            key={t.key}
+            onPress={() => onSelect(t.key)}
+            style={({ pressed }) => ({
+              opacity: pressed ? 0.8 : 1,
+              paddingBottom: spacing.sm,
+              borderBottomWidth: 2,
+              borderBottomColor: isActive ? colors.textPrimary : 'transparent',
+            })}
+          >
+            <Text style={{
+              color: isActive ? colors.textPrimary : colors.textMuted,
+              fontSize: font.sm, fontWeight: isActive ? '800' : '600',
+              letterSpacing: 0.3,
+            }}>
+              {t.label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+// ── CricketLiveHeroCard — bigger scoreboard-style card, Live tab only ──
+//
+// Mirrors FootballLiveHeroCard's visual weight: big circular team badges,
+// a clear LIVE pill, and (since cricket has two separate innings scores
+// rather than one combined score) each team's score/overs shown under its
+// own badge. The descriptive statusText line ("England need 45 off 8
+// balls", "Toss delayed — rain") fills the space below instead of a bare
+// "LIVE" when no score data has synced yet — far more informative.
+
+function CricketLiveHeroCard({ match, onPress, leagueLabel = 'IPL 2026' }: {
+  match: AdaptedMatch; onPress: () => void; leagueLabel?: string;
+}) {
+  const isLive = match.status === 'live';
+  const s1 = match.score1 ? (match.overs1 ? `${match.score1} (${match.overs1})` : match.score1) : null;
+  const s2 = match.score2 ? (match.overs2 ? `${match.score2} (${match.overs2})` : match.score2) : null;
+  const hasScore = !!(s1 || s2);
+
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => ({
+        opacity: pressed ? 0.92 : 1,
+        backgroundColor: colors.card, borderRadius: radius.xl,
+        borderWidth: isLive ? 1.5 : 1, borderColor: isLive ? C_LIVE + '40' : colors.border,
+        overflow: 'hidden', marginBottom: spacing.md, padding: spacing.lg,
+        shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 6,
+        elevation: 2,
+      })}
+    >
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.lg }}>
+        <View style={{
+          flexDirection: 'row', alignItems: 'center', gap: 5, flexShrink: 1, maxWidth: '62%',
+          backgroundColor: C_CRICKET_TAG + '15', borderRadius: 20,
+          paddingHorizontal: 9, paddingVertical: 3,
+          borderWidth: 1, borderColor: C_CRICKET_TAG + '30',
+        }}>
+          <Ionicons name="baseball-outline" size={10} color={C_CRICKET_TAG} />
+          <Text style={{ color: C_CRICKET_TAG, fontSize: 10, fontWeight: '700', letterSpacing: 0.3, flexShrink: 1 }} numberOfLines={1}>
+            {leagueLabel}
+          </Text>
+        </View>
+        {isLive && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: C_LIVE + '15', borderRadius: 20, paddingHorizontal: 8, paddingVertical: 3 }}>
+            <PulsingDot color={C_LIVE} />
+            <Text style={{ color: C_LIVE, fontSize: 9, fontWeight: '800', letterSpacing: 0.3 }}>LIVE</Text>
+          </View>
+        )}
+      </View>
+
+      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+        <View style={{ flex: 1, alignItems: 'center', gap: 10 }}>
+          <TeamBadge logo={match.team1Logo} code={match.team1Short} name={match.team1Name} size={64} />
+          <Text style={{ color: colors.textPrimary, fontSize: font.sm, fontWeight: '700', textAlign: 'center' }} numberOfLines={1}>
+            {match.team1Name}
+          </Text>
+          {s1 && <Text style={{ color: C_CRICKET_TAG, fontSize: font.base, fontWeight: '900' }}>{s1}</Text>}
+        </View>
+
+        <View style={{ alignItems: 'center', paddingHorizontal: spacing.sm, minWidth: 70 }}>
+          <Text style={{ color: colors.textMuted, fontSize: 22, fontWeight: '900', letterSpacing: -0.5 }}>VS</Text>
+        </View>
+
+        <View style={{ flex: 1, alignItems: 'center', gap: 10 }}>
+          <TeamBadge logo={match.team2Logo} code={match.team2Short} name={match.team2Name} size={64} />
+          <Text style={{ color: colors.textPrimary, fontSize: font.sm, fontWeight: '700', textAlign: 'center' }} numberOfLines={1}>
+            {match.team2Name}
+          </Text>
+          {s2 && <Text style={{ color: C_CRICKET_TAG, fontSize: font.base, fontWeight: '900' }}>{s2}</Text>}
+        </View>
+      </View>
+
+      <View style={{ marginTop: spacing.lg, paddingTop: spacing.md, borderTopWidth: 1, borderTopColor: colors.border }}>
+        <Text style={{
+          textAlign: 'center', fontSize: font.xs,
+          color: match.statusText ? colors.textSecondary : colors.textMuted,
+          fontWeight: match.statusText ? '600' : '500',
+        }} numberOfLines={2}>
+          {match.statusText || (hasScore ? '' : 'Match in progress…')}
+        </Text>
+      </View>
+
+      {match.venue ? (
+        <Text style={{ color: colors.textMuted, fontSize: 10, marginTop: spacing.sm, textAlign: 'center' }} numberOfLines={1}>
+          📍 {match.venue}
+        </Text>
+      ) : null}
+    </Pressable>
+  );
+}
+
+// ── FootballLiveHeroCard — bigger scoreboard-style card, Live tab only ──
+//
+// Big circular flags either side of a large score, a status pill
+// (LIVE/HT/Full-Time), and a goal-scorer list (when the backend has
+// attached events) split by side. Falls back gracefully — no scorer
+// rows — when no events are available for a match yet.
+
+function FootballLiveHeroCard({ match, onPress, leagueLabel = 'WC 2026' }: { match: FootballMatch; onPress: () => void; leagueLabel?: string }) {
+  const isLive   = match.status === 'live';
+  const hasScore = match.score.home !== null && match.score.away !== null;
+  const goals    = (match.events ?? []).filter(e => e.type === 'Goal');
+  const homeGoals = goals.filter(g => g.teamId === match.homeTeam.id);
+  const awayGoals = goals.filter(g => g.teamId === match.awayTeam.id);
+
+  const statusLabel = match.statusText === 'HT'
+    ? 'Half-Time'
+    : match.status === 'completed'
+      ? 'Full-Time'
+      : (match.minute ? `${match.minute}'` : 'LIVE');
+
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => ({
+        opacity: pressed ? 0.92 : 1,
+        backgroundColor: colors.card, borderRadius: radius.xl,
+        borderWidth: isLive ? 1.5 : 1, borderColor: isLive ? C_LIVE + '40' : colors.border,
+        overflow: 'hidden', marginBottom: spacing.md, padding: spacing.lg,
+        shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 6,
+        elevation: 2,
+      })}
+    >
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.lg }}>
+        <View style={{
+          flexDirection: 'row', alignItems: 'center', gap: 5,
+          backgroundColor: colors.accent + '12', borderRadius: 20,
+          paddingHorizontal: 9, paddingVertical: 3,
+          borderWidth: 1, borderColor: colors.accent + '30',
+        }}>
+          <Ionicons name="football-outline" size={10} color={colors.accent} />
+          <Text style={{ color: colors.accent, fontSize: 10, fontWeight: '700', letterSpacing: 0.3 }}>
+            {leagueLabel}{match.group ? ` · Group ${match.group}` : ''}
+          </Text>
+        </View>
+        {isLive && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: C_LIVE + '15', borderRadius: 20, paddingHorizontal: 8, paddingVertical: 3 }}>
+            <PulsingDot color={C_LIVE} />
+            <Text style={{ color: C_LIVE, fontSize: 9, fontWeight: '800', letterSpacing: 0.3 }}>LIVE</Text>
+          </View>
+        )}
+      </View>
+
+      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+        <View style={{ flex: 1, alignItems: 'center', gap: 10 }}>
+          <TeamBadge logo={match.homeTeam.logo} code={match.homeTeam.shortName} name={match.homeTeam.name} size={64} />
+          <Text style={{ color: colors.textPrimary, fontSize: font.sm, fontWeight: '700', textAlign: 'center' }} numberOfLines={1}>
+            {match.homeTeam.name}
+          </Text>
+        </View>
+
+        <View style={{ alignItems: 'center', paddingHorizontal: spacing.sm, minWidth: 90 }}>
+          <Text style={{
+            color: isLive ? C_LIVE : colors.textMuted, fontSize: 10, fontWeight: '800',
+            letterSpacing: 0.5, marginBottom: 8, textTransform: 'uppercase',
+          }}>
+            {statusLabel}
+          </Text>
+          <Text style={{ color: colors.textPrimary, fontSize: 40, fontWeight: '900', letterSpacing: -1 }}>
+            {hasScore ? `${match.score.home} - ${match.score.away}` : 'vs'}
+          </Text>
+        </View>
+
+        <View style={{ flex: 1, alignItems: 'center', gap: 10 }}>
+          <TeamBadge logo={match.awayTeam.logo} code={match.awayTeam.shortName} name={match.awayTeam.name} size={64} />
+          <Text style={{ color: colors.textPrimary, fontSize: font.sm, fontWeight: '700', textAlign: 'center' }} numberOfLines={1}>
+            {match.awayTeam.name}
+          </Text>
+        </View>
+      </View>
+
+      {goals.length > 0 && (
+        <View style={{
+          flexDirection: 'row', alignItems: 'flex-start', marginTop: spacing.lg,
+          paddingTop: spacing.md, borderTopWidth: 1, borderTopColor: colors.border,
+        }}>
+          <View style={{ flex: 1, gap: 4 }}>
+            {homeGoals.map((g, i) => (
+              <Text key={i} style={{ color: colors.textSecondary, fontSize: font.xs }} numberOfLines={1}>
+                {g.player} <Text style={{ color: colors.textMuted }}>{g.minute}{g.extra ? `+${g.extra}` : ''}'{g.detail === 'Own Goal' ? ' (og)' : ''}</Text>
+              </Text>
+            ))}
+          </View>
+          <Ionicons name="football" size={13} color={colors.textMuted} style={{ marginHorizontal: spacing.sm, marginTop: 2 }} />
+          <View style={{ flex: 1, gap: 4 }}>
+            {awayGoals.map((g, i) => (
+              <Text key={i} style={{ color: colors.textSecondary, fontSize: font.xs, textAlign: 'right' }} numberOfLines={1}>
+                {g.player} <Text style={{ color: colors.textMuted }}>{g.minute}{g.extra ? `+${g.extra}` : ''}'{g.detail === 'Own Goal' ? ' (og)' : ''}</Text>
+              </Text>
+            ))}
+          </View>
+        </View>
+      )}
+
+      {match.venue ? (
+        <Text style={{ color: colors.textMuted, fontSize: 10, marginTop: spacing.md, textAlign: 'center' }} numberOfLines={1}>
+          📍 {match.venue}
+        </Text>
+      ) : null}
+    </Pressable>
+  );
+}
+
+type AllMatchesTab = 'live' | 'fixtures' | 'completed';
+
+function AllMatchesScreen({ onSeeAllLeague }: { onSeeAllLeague: (leagueId: string, tab: 'Fixtures' | 'Results') => void }) {
+  const router = useRouter();
+  const { leagues } = useLeague();
+  const { data: accuracy } = useAccuracy();
+  const { live, upcoming, completed, isLoading, isRefetching, refetch } = useAllMatches();
+  const [tab, setTab] = useState<AllMatchesTab>('fixtures');
+
+  function goToItem(item: AllMatchItem) {
+    if (item.kind === 'cricket') router.push(`/(match-details)/${item.match.id}`);
+    else router.push(`/(match-details)/${item.match.id}?sport=football` as any);
+  }
+
+  function leagueFullName(leagueId: string, fallback: string) {
+    return leagues.find(l => l.id === leagueId)?.name ?? fallback;
+  }
+
+  const liveCricket  = live.filter(i => i.kind === 'cricket');
+  const liveFootball = live.filter(i => i.kind === 'football');
+
+  const upcomingGroups  = groupByLeague(upcoming, leagues);
+  const completedGroups = groupByLeague(completed, leagues);
+
+  const TABS = [
+    { key: 'live',      label: live.length > 0 ? `LIVE (${live.length})` : 'LIVE' },
+    { key: 'fixtures',  label: 'FIXTURES' },
+    { key: 'completed', label: 'COMPLETED' },
+  ];
+
+  const isEmpty = !isLoading && live.length === 0 && upcoming.length === 0 && completed.length === 0;
+
+  return (
+    <View style={{ flex: 1, backgroundColor: colors.bg }}>
+      <SafeAreaView style={{ flex: 1 }}>
+        <View style={{ paddingHorizontal: spacing.lg }}>
+          <View style={{
+            flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+            marginTop: spacing.sm, marginBottom: spacing.lg,
+          }}>
+            <View>
+              <Text style={{ color: colors.textPrimary, fontSize: 26, fontWeight: '800', letterSpacing: -0.5 }}>
+                Matches
+              </Text>
+              <Text style={{ color: colors.textSecondary, fontSize: font.sm, marginTop: 2 }}>
+                Every league · cricket & football
+              </Text>
+            </View>
+            {accuracy && (
+              <AccuracyBadge percentage={accuracy.percentage} sampleSize={accuracy.sampleSize} />
+            )}
+          </View>
+
+          <UnderlineTabs tabs={TABS} active={tab} onSelect={(k) => setTab(k as AllMatchesTab)} />
+        </View>
+
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingHorizontal: spacing.lg, paddingBottom: 100 }}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefetching}
+              onRefresh={refetch}
+              tintColor={colors.accent}
+              colors={[colors.accent]}
+              progressBackgroundColor={colors.card}
+            />
+          }
+        >
+          {isLoading && isEmpty ? (
+            <>
+              <MatchCardSkeleton />
+              <MatchCardSkeleton />
+              <MatchCardSkeleton />
+            </>
+          ) : isEmpty ? (
+            <EmptyCard message="No matches right now — check back soon" />
+          ) : tab === 'live' ? (
+            live.length === 0 ? (
+              <EmptyCard message="No live matches right now" />
+            ) : (
+              <>
+                {liveCricket.length > 0 && (
+                  <View style={{ marginBottom: spacing.lg }}>
+                    <SectionHeader emoji="🏏" title="Cricket" badge={liveCricket.length} />
+                    {liveCricket.map(item => (
+                      <CricketLiveHeroCard
+                        key={item.match.id}
+                        match={item.match}
+                        leagueLabel={leagueFullName(item.leagueId, item.leagueLabel)}
+                        onPress={() => goToItem(item)}
+                      />
+                    ))}
+                  </View>
+                )}
+                {liveFootball.length > 0 && (
+                  <View style={{ marginBottom: spacing.lg }}>
+                    <SectionHeader emoji="⚽" title="Football" badge={liveFootball.length} />
+                    {liveFootball.map(item => (
+                      <FootballLiveHeroCard
+                        key={item.match.id}
+                        match={item.match}
+                        leagueLabel={leagueFullName(item.leagueId, item.leagueLabel)}
+                        onPress={() => goToItem(item)}
+                      />
+                    ))}
+                  </View>
+                )}
+              </>
+            )
+          ) : tab === 'fixtures' ? (
+            upcomingGroups.length === 0 ? (
+              <EmptyCard message="No upcoming matches scheduled" />
+            ) : (
+              upcomingGroups.map((g, i) => (
+                <LeagueAccordion
+                  key={g.leagueId}
+                  {...g}
+                  defaultExpanded={i === 0}
+                  targetTab="Fixtures"
+                  onPress={goToItem}
+                  onSeeAll={onSeeAllLeague}
+                />
+              ))
+            )
+          ) : (
+            completedGroups.length === 0 ? (
+              <EmptyCard message="No completed matches yet" />
+            ) : (
+              completedGroups.map(g => (
+                <LeagueAccordion
+                  key={g.leagueId}
+                  {...g}
+                  targetTab="Results"
+                  onPress={goToItem}
+                  onSeeAll={onSeeAllLeague}
+                />
+              ))
+            )
+          )}
+        </ScrollView>
+      </SafeAreaView>
+    </View>
+  );
+}
+
 // ── Main screen ───────────────────────────────────────────────
+//
+// Follows the shared league-selection scope (LeagueContext.hasSelectedLeague)
+// rather than its own local state, so it stays in sync with Home: picking a
+// league (in Discovery or the league sheet) shows that league's Matches;
+// going back to "All Sports"/"All Matches" anywhere drops everyone back to
+// the cross-league feed together.
 
 export default function MatchesScreen() {
+  const { hasSelectedLeague, setLeagueId } = useLeague();
   const isFootball = useIsFootball();
+  const [initialTab, setInitialTab] = useState<'Fixtures' | 'Results' | null>(null);
+
+  function goToLeagueTab(leagueId: string, tab: 'Fixtures' | 'Results') {
+    setLeagueId(leagueId);
+    setInitialTab(tab);
+  }
+
+  if (!hasSelectedLeague) {
+    return <AllMatchesScreen onSeeAllLeague={goToLeagueTab} />;
+  }
+
   return (
     <LeaguePickerGate>
-      {isFootball ? <FootballMatchesScreen /> : <CricketMatchesScreen />}
+      {isFootball ? <FootballMatchesScreen initialTab={initialTab} /> : <CricketMatchesScreen initialTab={initialTab} />}
     </LeaguePickerGate>
   );
 }

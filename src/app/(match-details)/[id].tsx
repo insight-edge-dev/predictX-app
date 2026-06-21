@@ -1385,7 +1385,7 @@ function PlayerPredictionRow({
   prediction,
   index,
 }: {
-  player:     { id?: string; name: string; role: string };
+  player:     { id?: string; name: string; role: string; image?: string };
   prediction: PlayerPrediction | undefined;
   index:      number;
 }) {
@@ -1398,6 +1398,10 @@ function PlayerPredictionRow({
     'BOL':    '#f87171',
   };
   const roleColor = roleColors[player.role] ?? colors.textMuted;
+  // Sportsmonks returns a literal "placeholder.png" sentinel when it has no
+  // real headshot for a player — treat that the same as "no photo" so we
+  // show our own initials circle instead of their generic stand-in graphic.
+  const photo = player.image && !player.image.includes('placeholder') ? player.image : '';
 
   return (
     <Pressable
@@ -1408,6 +1412,7 @@ function PlayerPredictionRow({
         backgroundColor: index % 2 === 0 ? 'transparent' : colors.cardElevated + '30',
         borderRadius: 4, paddingHorizontal: spacing.xs,
       }}>
+      <PlayerAvatar uri={photo} initial={player.name.charAt(0)} size={32} />
       <View style={{
         width: 24, height: 24, borderRadius: 12,
         backgroundColor: roleColor + '20', alignItems: 'center', justifyContent: 'center',

@@ -1,11 +1,13 @@
+import { Text } from 'react-native';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useIsFootball } from '@/contexts/LeagueContext';
+import { useLeague, useIsFootball } from '@/contexts/LeagueContext';
 
 export default function TabLayout() {
   const insets     = useSafeAreaInsets();
   const isFootball = useIsFootball();
+  const { league, hasSelectedLeague } = useLeague();
 
   return (
     <Tabs
@@ -43,6 +45,17 @@ export default function TabLayout() {
       />
 
       <Tabs.Screen
+        name="(leaguehome)"
+        options={{
+          tabBarLabel: league.short,
+          href: hasSelectedLeague ? undefined : null,
+          tabBarIcon: ({ size }) => (
+            <Text style={{ fontSize: size }}>{league.flag}</Text>
+          ),
+        }}
+      />
+
+      <Tabs.Screen
         name="(matches)"
         options={{
           tabBarLabel: isFootball ? 'Fixtures' : 'Matches',
@@ -66,11 +79,7 @@ export default function TabLayout() {
         options={{
           tabBarLabel: 'PredictX',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons
-              name={isFootball ? 'stats-chart-outline' : 'flash-outline'}
-              size={size - 2}
-              color={color}
-            />
+            <Ionicons name="flash-outline" size={size - 2} color={color} />
           ),
         }}
       />

@@ -4,8 +4,8 @@ import {
   ActivityIndicator, Linking, Animated,
 } from 'react-native';
 
-const PRIVACY_URL = 'https://insight-edge-dev.github.io/PredictX-Legal/privacy-policy.html';
-const TERMS_URL   = 'https://insight-edge-dev.github.io/PredictX-Legal/terms-of-service.html';
+const PRIVACY_URL = 'https://insight-edge-dev.github.io/Cricvora-Legal/privacy-policy.html';
+const TERMS_URL   = 'https://insight-edge-dev.github.io/Cricvora-Legal/terms-of-service.html';
 import { memo, useRef, useState, useCallback, useEffect } from 'react';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';

@@ -8,7 +8,7 @@ import { useLeague, useIsFootball } from '@/contexts/LeagueContext';
 import { useNotificationBadge } from '@/contexts/NotificationBadgeContext';
 import { useMatchCategories, useLeagueTable } from '@/hooks/useMatches';
 import { useTipsList } from '@/hooks/useTips';
-import { useHomeNews, useExpertPredictions } from '@/hooks/useHome';
+import { useHomeNews, useExpertPredictions, useAccuracy } from '@/hooks/useHome';
 import { useFootballMatches } from '@/hooks/useFootballMatches';
 import { useFootballTips } from '@/hooks/useFootballTips';
 import { useWC2026Groups } from '@/hooks/useWC2026Groups';
@@ -20,10 +20,10 @@ import { colors, spacing, font, radius } from '@/constants/theme';
 import {
   C_CRICKET, C_FOOTBALL, C_LIVE,
   isToday, greeting, fmtDate,
-  SectionHeader, EmptyCard, SportPill,
+  SectionHeader, LiveSectionHeader, EmptyCard, SportPill,
   CricketMatchCard, FootballMatchCard, NewsCard, AIPickCard, CricketPickCard,
   MiniStandingsTable, WCCountdownBanner, WCStatCard, FactCard, ExpertPickCard,
-  WC_FACTS, fbFlag,
+  WC_FACTS, fbFlag, AccuracyBadge,
   type StatCard,
 } from '@/components/home/HomeShared';
 
@@ -32,7 +32,6 @@ import {
 interface Props {
   onOpenLeagueSheet: (sport?: SportTab) => void;
   onOpenDrawer:      () => void;
-  onBackToDiscovery: () => void;
 }
 
 // ── Main Screen ───────────────────────────────────────────────
@@ -44,10 +43,11 @@ export default function LeagueHomeScreen(props: Props) {
 
 // ── Shared header ─────────────────────────────────────────────
 
-function LeagueHomeHeader({ onOpenLeagueSheet, onOpenDrawer, onBackToDiscovery }: Props) {
+function LeagueHomeHeader({ onOpenLeagueSheet, onOpenDrawer }: Props) {
   const router = useRouter();
-  const { league } = useLeague();
+  const { league, clearLeagueSelection } = useLeague();
   const { unreadCount } = useNotificationBadge();
+  const { data: accuracy } = useAccuracy(league.id);
 
   return (
     <>
@@ -61,6 +61,9 @@ function LeagueHomeHeader({ onOpenLeagueSheet, onOpenDrawer, onBackToDiscovery }
           <Text style={{ color: colors.textSecondary, fontSize: font.xs, marginTop: 2 }}>{greeting()} · {fmtDate()}</Text>
         </View>
         <View style={{ flexDirection: 'row', gap: spacing.sm, alignItems: 'center' }}>
+          {accuracy && (
+            <AccuracyBadge percentage={accuracy.percentage} sampleSize={accuracy.sampleSize} label={league.short} />
+          )}
           <Pressable
             onPress={() => router.push('/(settings)/notifications' as any)}
             style={({ pressed }) => ({
@@ -112,7 +115,7 @@ function LeagueHomeHeader({ onOpenLeagueSheet, onOpenDrawer, onBackToDiscovery }
         <SportPill emoji="⚽" label="Football" color={C_FOOTBALL} textColor="#FFFFFF" active={league.sport === 'football'} onPress={() => onOpenLeagueSheet('football')} />
         <View style={{ flex: 1 }} />
         <Pressable
-          onPress={onBackToDiscovery}
+          onPress={() => { clearLeagueSelection(); router.push('/(tabs)/(home)'); }}
           style={({ pressed }) => ({
             opacity: pressed ? 0.8 : 1,
             flexDirection: 'row', alignItems: 'center', gap: 4,
@@ -174,7 +177,7 @@ function CricketLeagueHome(props: Props) {
           {/* ── Live Now ───────────────────────────── */}
           {liveMatches.length > 0 && (
             <View style={{ marginBottom: spacing.xl }}>
-              <SectionHeader emoji="🔴" title="Live Now" badge={liveMatches.length} />
+              <LiveSectionHeader count={liveMatches.length} />
               {liveMatches.map(m => (
                 <CricketMatchCard key={m.id} match={m} onPress={() => goToMatch(m.id)} leagueLabel={leagueLabel} />
               ))}
@@ -333,7 +336,7 @@ function FootballLeagueHome(props: Props) {
           {/* ── Live Now ───────────────────────────── */}
           {liveMatches.length > 0 && (
             <View style={{ marginBottom: spacing.xl }}>
-              <SectionHeader emoji="🔴" title="Live Now" badge={liveMatches.length} />
+              <LiveSectionHeader count={liveMatches.length} />
               {liveMatches.map(m => (
                 <FootballMatchCard key={m.id} match={m} onPress={() => goToMatch(m.id)} />
               ))}

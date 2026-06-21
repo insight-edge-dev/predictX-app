@@ -38,6 +38,7 @@ export interface Player {
   role:         string;
   battingStyle: string;
   bowlingStyle: string;
+  image:        string;
   isCaptain:    boolean;
   isKeeper:     boolean;
 }

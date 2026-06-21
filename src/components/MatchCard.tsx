@@ -135,11 +135,10 @@ function HorizontalTeamRow({
 // ── Prediction result badge ────────────────────────────────────
 
 export function PredictionBadge({ label, result }: { label: string; result: 'correct' | 'wrong' }) {
-  const ok     = result === 'correct';
-  const color  = ok ? colors.success : colors.danger;
-  const bg     = ok ? colors.successDim : colors.dangerDim;
-  const icon   = ok ? 'checkmark-circle-outline' : 'close-circle-outline';
-  const suffix = ok ? 'Correct' : 'Wrong';
+  const ok    = result === 'correct';
+  const color = ok ? colors.success : colors.danger;
+  const bg    = ok ? colors.successDim : colors.dangerDim;
+  const icon  = ok ? 'checkmark-circle' : 'close-circle';
 
   return (
     <View
@@ -152,7 +151,7 @@ export function PredictionBadge({ label, result }: { label: string; result: 'cor
     >
       <Ionicons name={icon} size={12} color={color} />
       <Text style={{ color, fontSize: font.xs, fontWeight: '700' }}>
-        {label} · {suffix}
+        {label}
       </Text>
     </View>
   );
@@ -351,18 +350,17 @@ export const MatchCard = memo(function MatchCard({
             <View
               style={{
                 flexDirection:  'row',
-                flexWrap:       'wrap',
-                gap:            spacing.sm,
+                justifyContent: 'space-between',
                 paddingHorizontal: spacing.lg,
                 paddingBottom:  spacing.md,
               }}
             >
-              {predictionResult != null && (
-                <PredictionBadge label="AI" result={predictionResult} />
-              )}
-              {expertPredictionResult != null && (
-                <PredictionBadge label="Expert" result={expertPredictionResult} />
-              )}
+              {predictionResult != null
+                ? <PredictionBadge label="PredictX" result={predictionResult} />
+                : <View />}
+              {expertPredictionResult != null
+                ? <PredictionBadge label="Panel Prediction" result={expertPredictionResult} />
+                : <View />}
             </View>
           )}
         </View>

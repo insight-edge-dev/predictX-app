@@ -66,10 +66,19 @@ function Avatar({ name, size = 72, onGradient = false }: { name: string; size?: 
 
 // ── Stat box ──────────────────────────────────────────────────
 
-function StatBox({ value, label, color }: { value: string | number; label: string; color?: string }) {
+function StatBox({ icon, value, label, color }: {
+  icon: keyof typeof Ionicons.glyphMap; value: string | number; label: string; color?: string;
+}) {
+  const tint = color ?? colors.accent;
   return (
     <View style={{ flex: 1, alignItems: "center" }}>
-      <Text style={{ color: color ?? colors.accent, fontSize: 22, fontWeight: "900", letterSpacing: -0.5 }}>
+      <View style={{
+        width: 28, height: 28, borderRadius: 14, marginBottom: 6,
+        backgroundColor: tint + "15", alignItems: "center", justifyContent: "center",
+      }}>
+        <Ionicons name={icon} size={14} color={tint} />
+      </View>
+      <Text style={{ color: colors.textPrimary, fontSize: 18, fontWeight: "900", letterSpacing: -0.5 }}>
         {value}
       </Text>
       <Text style={{ color: colors.textMuted, fontSize: 10, fontWeight: "600", marginTop: 2, textTransform: "uppercase", letterSpacing: 0.5 }}>
@@ -129,7 +138,7 @@ function SettingsRow({ icon, label, danger, value, onPress, last }: {
         {label}
       </Text>
       {value ? <Text style={{ color: colors.textMuted, fontSize: font.sm, marginRight: 6 }}>{value}</Text> : null}
-      {!danger && <Ionicons name="chevron-forward" size={15} color={colors.border} />}
+      {!danger && <Ionicons name="chevron-forward" size={15} color={colors.textMuted} />}
     </Pressable>
   );
 }
@@ -402,11 +411,11 @@ export default function ProfileScreen() {
               borderRadius: radius.lg, padding: spacing.lg,
               ...cardShadow,
             }}>
-              <StatBox value={favouriteTeams.length || "—"} label="Fav Teams" color={colors.accent} />
+              <StatBox icon="heart" value={favouriteTeams.length || "—"} label="Fav Teams" color={colors.accent} />
               <View style={{ width: 1, backgroundColor: colors.border, marginVertical: 4 }} />
-              <StatBox value={league.short} label="League" color="#a78bfa" />
+              <StatBox icon="trophy" value={league.short} label="League" color={colors.warning} />
               <View style={{ width: 1, backgroundColor: colors.border, marginVertical: 4 }} />
-              <StatBox value={memberSince} label="Joined" color={colors.success} />
+              <StatBox icon="calendar" value={memberSince} label="Joined" color={colors.success} />
             </View>
           )}
 

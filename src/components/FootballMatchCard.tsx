@@ -225,18 +225,17 @@ export const FootballMatchCard = memo(function FootballMatchCard({
             <View
               style={{
                 flexDirection:  'row',
-                flexWrap:       'wrap',
-                gap:            spacing.sm,
+                justifyContent: 'space-between',
                 paddingHorizontal: spacing.lg,
                 paddingBottom:  spacing.md,
               }}
             >
-              {predictionResult != null && (
-                <PredictionBadge label="AI" result={predictionResult} />
-              )}
-              {expertPredictionResult != null && (
-                <PredictionBadge label="Expert" result={expertPredictionResult} />
-              )}
+              {predictionResult != null
+                ? <PredictionBadge label="PredictX" result={predictionResult} />
+                : <View />}
+              {expertPredictionResult != null
+                ? <PredictionBadge label="Panel Prediction" result={expertPredictionResult} />
+                : <View />}
             </View>
           )}
         </View>

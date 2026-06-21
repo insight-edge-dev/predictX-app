@@ -1,11 +1,12 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
-  View, Text, Pressable, Image,
+  View, Text, Pressable, Image, Animated,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, font, radius } from '@/constants/theme';
 import { getTeamColor } from '@/theme/colors';
 import { TeamCrest } from '@/components/TeamCrest';
+import { countryFlagUrl } from '@/utils/flags';
 import { API_BASE_URL } from '@/config/api';
 import type { AdaptedMatch } from '@/utils/matchAdapter';
 import type { FootballMatch, FootballMatchWithTip } from '@/types/football';
@@ -86,9 +87,10 @@ export function shortDate(d: string) {
   try { return new Date(d).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' }); }
   catch { return d.slice(0, 10); }
 }
+// `ts` is a Cricbuzz pubTime — already epoch milliseconds, not seconds.
 export function timeAgo(ts: number | null) {
   if (!ts) return '';
-  const mins = Math.floor((Date.now() - ts * 1000) / 60_000);
+  const mins = Math.floor((Date.now() - ts) / 60_000);
   if (mins < 60) return `${mins}m ago`;
   const hrs = Math.floor(mins / 60);
   if (hrs < 24) return `${hrs}h ago`;
@@ -114,6 +116,75 @@ export function SectionHeader({ emoji, title, badge, onMore, moreLabel = 'See al
           <Text style={{ color: colors.accent, fontSize: font.xs, fontWeight: '700' }}>{moreLabel}</Text>
         </Pressable>
       )}
+    </View>
+  );
+}
+
+// ── LiveSectionHeader ─────────────────────────────────────────
+// Dedicated header for "Live Now" sections — a real pulsing dot instead
+// of a 🔴 emoji, kept visually quiet so the match cards below do the talking.
+
+export function LiveSectionHeader({ count }: { count: number }) {
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: spacing.md }}>
+      <PulsingDot color={C_LIVE} size={6} />
+      <Text style={{ color: colors.textPrimary, fontSize: font.md, fontWeight: '800', marginLeft: 2, flex: 1 }}>
+        Live Now
+      </Text>
+      {count > 0 && (
+        <View style={{ backgroundColor: C_LIVE, borderRadius: 8, paddingHorizontal: 7, paddingVertical: 2 }}>
+          <Text style={{ color: '#fff', fontSize: 9, fontWeight: '900' }}>{count}</Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
+// ── AccuracyBadge ─────────────────────────────────────────────
+// Real prediction accuracy % (global or per-league), admin-overridable.
+// Hidden entirely when sampleSize is 0 so a brand-new league never shows
+// a misleading "0% accuracy".
+
+export function AccuracyBadge({ percentage, sampleSize, compact, label }: {
+  percentage: number; sampleSize: number; compact?: boolean; label?: string;
+}) {
+  if (!sampleSize) return null;
+  const tint = percentage >= 65 ? colors.success : colors.accent;
+
+  if (compact) {
+    return (
+      <View style={{
+        flexDirection: 'row', alignItems: 'center', gap: 5,
+        backgroundColor: tint + '15', borderRadius: 8,
+        paddingHorizontal: 7, paddingVertical: 3,
+        borderWidth: 1, borderColor: tint + '30',
+      }}>
+        <Ionicons name="locate" size={10} color={tint} />
+        <Text style={{ color: tint, fontSize: 10, fontWeight: '800' }}>
+          {percentage}% Accuracy
+        </Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={{
+      alignItems: 'center',
+      backgroundColor: tint + '15', borderRadius: 12,
+      paddingHorizontal: 14, paddingVertical: label ? 5 : 6,
+      borderWidth: 1, borderColor: tint + '30', alignSelf: 'flex-start',
+    }}>
+      {label && (
+        <Text style={{ color: tint, fontSize: 9, fontWeight: '800', letterSpacing: 0.5, marginBottom: 1 }}>
+          {label}
+        </Text>
+      )}
+      <Text style={{ color: tint, fontSize: 20, fontWeight: '900', letterSpacing: -0.5, lineHeight: 22 }}>
+        {percentage}%
+      </Text>
+      <Text style={{ color: tint, fontSize: 8, fontWeight: '800', letterSpacing: 1 }}>
+        ACCURACY
+      </Text>
     </View>
   );
 }
@@ -158,7 +229,110 @@ export function SportPill({ emoji, label, color, textColor, active = true, onPre
   );
 }
 
+// ── TeamBadge — real logo → real flag image → initials. No emoji. ──
+
+export function TeamBadge({ logo, code, name, size = 32 }: {
+  logo?: string; code: string; name?: string; size?: number;
+}) {
+  const [logoFailed, setLogoFailed] = useState(false);
+  const [flagFailed, setFlagFailed] = useState(false);
+
+  const flagUrl   = countryFlagUrl(code, name);
+  const showLogo  = !!logo && !logoFailed;
+  const showFlag  = !showLogo && !!flagUrl && !flagFailed;
+  const tint      = getTeamColor(code);
+
+  if (showLogo) {
+    return (
+      <Image
+        source={{ uri: logo }}
+        style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: tint + '12' }}
+        resizeMode="cover"
+        onError={() => setLogoFailed(true)}
+      />
+    );
+  }
+  if (showFlag) {
+    return (
+      <Image
+        source={{ uri: flagUrl! }}
+        style={{ width: size, height: size, borderRadius: size / 2 }}
+        resizeMode="cover"
+        onError={() => setFlagFailed(true)}
+      />
+    );
+  }
+  return (
+    <View style={{
+      width: size, height: size, borderRadius: size / 2,
+      backgroundColor: tint + '20', alignItems: 'center', justifyContent: 'center',
+    }}>
+      <Text style={{ fontSize: size * 0.34, fontWeight: '800', color: tint }}>
+        {code.replace(/-W$|-A$/i, '').slice(0, 3).toUpperCase()}
+      </Text>
+    </View>
+  );
+}
+
+// ── LeagueLogo — competition logo/flag in a tinted circle, with a
+//    text-emoji fallback if the image fails to load. Used wherever a
+//    league/competition (not a team) needs a small badge icon. ──
+
+export function LeagueLogo({ image, flag, color, size = 36 }: {
+  image?: string; flag: string; color: string; size?: number;
+}) {
+  const [failed, setFailed] = useState(false);
+  if (image && !failed) {
+    return (
+      <Image
+        source={{ uri: image }}
+        style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: color + '10' }}
+        resizeMode="contain"
+        onError={() => setFailed(true)}
+      />
+    );
+  }
+  return (
+    <View style={{
+      width: size, height: size, borderRadius: size / 2,
+      backgroundColor: color + '15', alignItems: 'center', justifyContent: 'center',
+    }}>
+      <Text style={{ fontSize: size * 0.5 }}>{flag}</Text>
+    </View>
+  );
+}
+
+// ── PulsingDot — animated "live" indicator (radar-ping style) ──
+
+export function PulsingDot({ color, size = 6 }: { color: string; size?: number }) {
+  const pulse = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.timing(pulse, { toValue: 1, duration: 1200, useNativeDriver: true }),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [pulse]);
+
+  return (
+    <View style={{ width: size * 2.4, height: size * 2.4, alignItems: 'center', justifyContent: 'center' }}>
+      <Animated.View
+        style={{
+          position: 'absolute', width: size, height: size, borderRadius: size / 2,
+          backgroundColor: color,
+          opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.55, 0] }),
+          transform: [{ scale: pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 2.6] }) }],
+        }}
+      />
+      <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: color }} />
+    </View>
+  );
+}
+
 // ── CricketMatchCard ──────────────────────────────────────────
+
+export const C_CRICKET_TAG = '#D97706';
 
 export function CricketMatchCard({ match, onPress, leagueLabel = 'IPL 2026' }: {
   match: AdaptedMatch; onPress: () => void; leagueLabel?: string;
@@ -170,48 +344,76 @@ export function CricketMatchCard({ match, onPress, leagueLabel = 'IPL 2026' }: {
   return (
     <Pressable onPress={onPress}
       style={({ pressed }) => ({
-        opacity: pressed ? 0.85 : 1,
+        opacity: pressed ? 0.9 : 1,
         backgroundColor: colors.card, borderRadius: radius.lg,
-        borderWidth: 1, borderColor: isLive ? C_CRICKET + '50' : colors.border,
-        marginBottom: spacing.sm, flexDirection: 'row', overflow: 'hidden',
+        borderWidth: 1, borderColor: colors.border,
+        borderLeftWidth: isLive ? 3 : 1, borderLeftColor: isLive ? C_LIVE : colors.border,
+        marginBottom: spacing.sm, overflow: 'hidden',
+        shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.04, shadowRadius: 3,
+        elevation: 1,
       })}>
-      <View style={{ width: 3, backgroundColor: isLive ? C_LIVE : C_CRICKET + '70' }} />
-      <View style={{ flex: 1, padding: spacing.md }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 7 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-            <Text style={{ fontSize: 11 }}>🏏</Text>
-            <Text style={{ color: C_CRICKET, fontSize: 10, fontWeight: '700', letterSpacing: 0.5 }}>{leagueLabel}</Text>
-          </View>
-          {isLive ? (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: C_LIVE + '22', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 }}>
-              <View style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: C_LIVE }} />
-              <Text style={{ color: C_LIVE, fontSize: 9, fontWeight: '800' }}>LIVE</Text>
+      <View style={{ flexDirection: 'row' }}>
+        <View style={{ flex: 1, padding: spacing.md }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.sm }}>
+            <View style={{
+              flexDirection: 'row', alignItems: 'center', gap: 5, flexShrink: 1, maxWidth: '62%',
+              backgroundColor: C_CRICKET_TAG + '15', borderRadius: 20,
+              paddingHorizontal: 9, paddingVertical: 3,
+              borderWidth: 1, borderColor: C_CRICKET_TAG + '30',
+            }}>
+              <Ionicons name="baseball-outline" size={10} color={C_CRICKET_TAG} />
+              <Text style={{ color: C_CRICKET_TAG, fontSize: 10, fontWeight: '700', letterSpacing: 0.3, flexShrink: 1 }} numberOfLines={1}>{leagueLabel}</Text>
             </View>
-          ) : (
-            <Text style={{ color: colors.textMuted, fontSize: 10 }}>
-              {isToday(match.date) ? match.time : `${shortDate(match.date)} · ${match.time}`}
-            </Text>
-          )}
-        </View>
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <View style={{ flex: 1 }}>
-            <Text style={{ color: colors.textPrimary, fontSize: font.sm, fontWeight: '800' }}>{match.team1Short}</Text>
-            {isLive && s1 && <Text style={{ color: C_CRICKET, fontSize: 11, fontWeight: '600', marginTop: 2 }}>{s1}</Text>}
+            {isLive ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: C_LIVE + '15', borderRadius: 20, paddingHorizontal: 8, paddingVertical: 3 }}>
+                <PulsingDot color={C_LIVE} />
+                <Text style={{ color: C_LIVE, fontSize: 9, fontWeight: '800', letterSpacing: 0.3 }}>LIVE</Text>
+              </View>
+            ) : (
+              <Text style={{ color: colors.textMuted, fontSize: 10, fontWeight: '500' }}>
+                {isToday(match.date) ? match.time : `${shortDate(match.date)} · ${match.time}`}
+              </Text>
+            )}
           </View>
-          <Text style={{ color: colors.textMuted, fontSize: 11, paddingHorizontal: spacing.sm }}>vs</Text>
-          <View style={{ flex: 1, alignItems: 'flex-end' }}>
-            <Text style={{ color: colors.textPrimary, fontSize: font.sm, fontWeight: '800' }}>{match.team2Short}</Text>
-            {isLive && s2 && <Text style={{ color: C_CRICKET, fontSize: 11, fontWeight: '600', marginTop: 2 }}>{s2}</Text>}
+
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <TeamBadge logo={match.team1Logo} code={match.team1Short} name={match.team1Name} />
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: colors.textPrimary, fontSize: font.sm, fontWeight: '800' }} numberOfLines={1}>{match.team1Short}</Text>
+                {isLive && s1 && (
+                  <View style={{ backgroundColor: C_CRICKET_TAG + '15', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 1, marginTop: 2, alignSelf: 'flex-start' }}>
+                    <Text style={{ color: C_CRICKET_TAG, fontSize: 12, fontWeight: '800' }}>{s1}</Text>
+                  </View>
+                )}
+              </View>
+            </View>
+            <Text style={{ color: colors.textMuted, fontSize: 10, fontWeight: '600', paddingHorizontal: 6 }}>vs</Text>
+            <View style={{ flex: 1, flexDirection: 'row-reverse', alignItems: 'center', gap: 8 }}>
+              <TeamBadge logo={match.team2Logo} code={match.team2Short} name={match.team2Name} />
+              <View style={{ flex: 1, alignItems: 'flex-end' }}>
+                <Text style={{ color: colors.textPrimary, fontSize: font.sm, fontWeight: '800' }} numberOfLines={1}>{match.team2Short}</Text>
+                {isLive && s2 && (
+                  <View style={{ backgroundColor: C_CRICKET_TAG + '15', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 1, marginTop: 2, alignSelf: 'flex-end' }}>
+                    <Text style={{ color: C_CRICKET_TAG, fontSize: 12, fontWeight: '800' }}>{s2}</Text>
+                  </View>
+                )}
+              </View>
+            </View>
           </View>
+
+          {isLive && !s1 && !s2
+            ? <Text style={{ color: colors.textMuted, fontSize: 10, marginTop: spacing.sm }}>Match in progress…</Text>
+            : match.result
+              ? <Text style={{ color: colors.textSecondary, fontSize: 10, marginTop: spacing.sm }} numberOfLines={1}>{match.result}</Text>
+              : match.venue
+                ? <Text style={{ color: colors.textMuted, fontSize: 10, marginTop: spacing.sm }} numberOfLines={1}>📍 {match.venue}</Text>
+                : null}
         </View>
-        {match.result
-          ? <Text style={{ color: colors.textSecondary, fontSize: 10, marginTop: 5 }} numberOfLines={1}>{match.result}</Text>
-          : match.venue
-            ? <Text style={{ color: colors.textMuted, fontSize: 10, marginTop: 5 }} numberOfLines={1}>📍 {match.venue}</Text>
-            : null}
-      </View>
-      <View style={{ justifyContent: 'center', paddingRight: spacing.sm }}>
-        <Ionicons name="chevron-forward" size={14} color={colors.textMuted} />
+        <View style={{ justifyContent: 'center', paddingRight: spacing.sm }}>
+          <Ionicons name="chevron-forward" size={14} color={colors.textMuted} />
+        </View>
       </View>
     </Pressable>
   );
@@ -226,58 +428,80 @@ export function FootballMatchCard({ match, onPress }: { match: FootballMatch; on
   return (
     <Pressable onPress={onPress}
       style={({ pressed }) => ({
-        opacity: pressed ? 0.85 : 1,
+        opacity: pressed ? 0.9 : 1,
         backgroundColor: colors.card, borderRadius: radius.lg,
-        borderWidth: 1, borderColor: isLive ? C_FOOTBALL + '50' : colors.border,
-        marginBottom: spacing.sm, flexDirection: 'row', overflow: 'hidden',
+        borderWidth: 1, borderColor: colors.border,
+        borderLeftWidth: isLive ? 3 : 1, borderLeftColor: isLive ? C_LIVE : colors.border,
+        marginBottom: spacing.sm, overflow: 'hidden',
+        shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.04, shadowRadius: 3,
+        elevation: 1,
       })}>
-      <View style={{ width: 3, backgroundColor: isLive ? C_LIVE : C_FOOTBALL + '70' }} />
-      <View style={{ flex: 1, padding: spacing.md }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 7 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-            <Text style={{ fontSize: 11 }}>⚽</Text>
-            <Text style={{ color: colors.accent, fontSize: 10, fontWeight: '700', letterSpacing: 0.5 }}>
-              {'WC 2026'}{match.group ? ` · Group ${match.group}` : ''}
-            </Text>
-          </View>
-          {isLive ? (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: C_LIVE + '22', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 }}>
-              <View style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: C_LIVE }} />
-              <Text style={{ color: C_LIVE, fontSize: 9, fontWeight: '800' }}>{match.minute ? `${match.minute}'` : 'LIVE'}</Text>
+      <View style={{ flexDirection: 'row' }}>
+        <View style={{ flex: 1, padding: spacing.md }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.sm }}>
+            <View style={{
+              flexDirection: 'row', alignItems: 'center', gap: 5,
+              backgroundColor: colors.accent + '12', borderRadius: 20,
+              paddingHorizontal: 9, paddingVertical: 3,
+              borderWidth: 1, borderColor: colors.accent + '30',
+            }}>
+              <Ionicons name="football-outline" size={10} color={colors.accent} />
+              <Text style={{ color: colors.accent, fontSize: 10, fontWeight: '700', letterSpacing: 0.3 }}>
+                {'WC 2026'}{match.group ? ` · Group ${match.group}` : ''}
+              </Text>
             </View>
-          ) : (
-            <Text style={{ color: colors.textMuted, fontSize: 10 }}>
-              {isToday(match.date) ? match.time : `${shortDate(match.date)} · ${match.time}`}
-            </Text>
-          )}
-        </View>
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <TeamCrest logo={match.homeTeam.logo} flag={match.homeTeam.flag} size={18} />
-            <Text style={{ color: colors.textPrimary, fontSize: font.sm, fontWeight: '800' }}>
-              {match.homeTeam.shortName}
-            </Text>
+            {isLive ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: C_LIVE + '15', borderRadius: 20, paddingHorizontal: 8, paddingVertical: 3 }}>
+                <PulsingDot color={C_LIVE} />
+                <Text style={{ color: C_LIVE, fontSize: 9, fontWeight: '800', letterSpacing: 0.3 }}>{match.minute ? `${match.minute}'` : 'LIVE'}</Text>
+              </View>
+            ) : (
+              <Text style={{ color: colors.textMuted, fontSize: 10, fontWeight: '500' }}>
+                {isToday(match.date) ? match.time : `${shortDate(match.date)} · ${match.time}`}
+              </Text>
+            )}
           </View>
-          {hasScore ? (
-            <Text style={{ color: colors.textPrimary, fontSize: font.md, fontWeight: '900', paddingHorizontal: spacing.sm }}>
-              {match.score.home} – {match.score.away}
-            </Text>
-          ) : (
-            <Text style={{ color: colors.textMuted, fontSize: 11, paddingHorizontal: spacing.sm }}>vs</Text>
-          )}
-          <View style={{ flex: 1, flexDirection: 'row-reverse', alignItems: 'center', gap: 6 }}>
-            <TeamCrest logo={match.awayTeam.logo} flag={match.awayTeam.flag} size={18} />
-            <Text style={{ color: colors.textPrimary, fontSize: font.sm, fontWeight: '800' }}>
-              {match.awayTeam.shortName}
-            </Text>
+
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <TeamBadge logo={match.homeTeam.logo} code={match.homeTeam.shortName} name={match.homeTeam.name} />
+              <Text style={{ color: colors.textPrimary, fontSize: font.sm, fontWeight: '800', flex: 1 }} numberOfLines={1}>
+                {match.homeTeam.shortName}
+              </Text>
+            </View>
+            {hasScore ? (
+              <View style={{
+                backgroundColor: isLive ? C_LIVE + '12' : 'transparent', borderRadius: 8,
+                paddingHorizontal: isLive ? 8 : 0, paddingVertical: isLive ? 2 : 0,
+              }}>
+                <Text style={{
+                  color: isLive ? C_LIVE : colors.textPrimary, fontSize: isLive ? font.lg : font.md,
+                  fontWeight: '900', paddingHorizontal: isLive ? 0 : spacing.sm,
+                }}>
+                  {match.score.home} – {match.score.away}
+                </Text>
+              </View>
+            ) : (
+              <Text style={{ color: colors.textMuted, fontSize: 10, fontWeight: '600', paddingHorizontal: 6 }}>vs</Text>
+            )}
+            <View style={{ flex: 1, flexDirection: 'row-reverse', alignItems: 'center', gap: 8 }}>
+              <TeamBadge logo={match.awayTeam.logo} code={match.awayTeam.shortName} name={match.awayTeam.name} />
+              <Text style={{ color: colors.textPrimary, fontSize: font.sm, fontWeight: '800', flex: 1, textAlign: 'right' }} numberOfLines={1}>
+                {match.awayTeam.shortName}
+              </Text>
+            </View>
           </View>
+
+          {isLive && !hasScore
+            ? <Text style={{ color: colors.textMuted, fontSize: 10, marginTop: spacing.sm }}>Kicking off…</Text>
+            : match.venue
+              ? <Text style={{ color: colors.textMuted, fontSize: 10, marginTop: spacing.sm }} numberOfLines={1}>📍 {match.venue}</Text>
+              : null}
         </View>
-        {match.venue ? (
-          <Text style={{ color: colors.textMuted, fontSize: 10, marginTop: 5 }} numberOfLines={1}>📍 {match.venue}</Text>
-        ) : null}
-      </View>
-      <View style={{ justifyContent: 'center', paddingRight: spacing.sm }}>
-        <Ionicons name="chevron-forward" size={14} color={colors.textMuted} />
+        <View style={{ justifyContent: 'center', paddingRight: spacing.sm }}>
+          <Ionicons name="chevron-forward" size={14} color={colors.textMuted} />
+        </View>
       </View>
     </Pressable>
   );

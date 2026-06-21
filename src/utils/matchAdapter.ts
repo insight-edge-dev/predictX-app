@@ -69,6 +69,10 @@ export interface AdaptedMatch {
   matchStage:   string;   // "LEAGUE" | "QUALIFIER" | "ELIMINATOR" | "FINAL"
   seriesName:   string;
   seriesId:     string | null;
+
+  // Set only when a match has been aggregated across multiple leagues
+  // (e.g. the cross-league Discovery feed) so cards can label it correctly.
+  leagueLabel?: string;
 }
 
 // ── adaptMatch ────────────────────────────────────────────────

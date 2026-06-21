@@ -1,8 +1,10 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMemo } from 'react';
+import { useQuery, useQueries } from '@tanstack/react-query';
 import { getLeagueMatches } from '@/services/matchService';
 import { getFootballMatches } from '@/services/footballService';
 import { adaptMatch } from '@/utils/matchAdapter';
 import { adaptFootballMatches } from '@/utils/footballMatchAdapter';
+import { useLeague } from '@/contexts/LeagueContext';
 import type { AdaptedMatch } from '@/utils/matchAdapter';
 import type { FootballMatch } from '@/types/football';
 
@@ -26,20 +28,48 @@ const EMPTY_C = { live: [] as AdaptedMatch[],   upcoming: [] as AdaptedMatch[], 
 const EMPTY_F = { live: [] as FootballMatch[], upcoming: [] as FootballMatch[], completed: [] as FootballMatch[] };
 
 export function useHomeFeed(): HomeFeedResult {
-  const cricketQ = useQuery({
-    queryKey: ['homefeed:cricket'],
-    queryFn: async () => {
-      const d = await getLeagueMatches('ipl');
-      return {
-        live:      d.live.map(adaptMatch),
-        upcoming:  d.upcoming.map(adaptMatch),
-        completed: d.completed.map(adaptMatch),
-      };
-    },
-    staleTime:       30_000,
-    refetchInterval: (q) => (q.state.data?.live.length ? 30_000 : 120_000),
-    retry: 1,
+  const { leagues } = useLeague();
+
+  // Every in-season cricket league, not just IPL — mirrors useAllMatches'
+  // curation so the global Discovery feed actually is cross-league.
+  const cricketLeagues = useMemo(
+    () => leagues.filter(l => (l.sport === 'cricket' || !l.sport) && l.season === '2026'),
+    [leagues],
+  );
+
+  const cricketQs = useQueries({
+    queries: cricketLeagues.map((l) => ({
+      queryKey:        [`homefeed:cricket:${l.id}`],
+      queryFn:          () => getLeagueMatches(l.id, false),
+      staleTime:        30_000,
+      refetchInterval:  30_000,
+      retry:            0,
+    })),
   });
+
+  const cricketLoading    = cricketQs.some(q => q.isLoading);
+  const cricketRefetching = cricketQs.some(q => q.isRefetching);
+  const cricketRefetchAll = () => Promise.all(cricketQs.map(q => q.refetch()));
+
+  const cricket = useMemo(() => {
+    const live: AdaptedMatch[] = [], upcoming: AdaptedMatch[] = [], completed: AdaptedMatch[] = [];
+    cricketLeagues.forEach((l, i) => {
+      const d = cricketQs[i]?.data;
+      if (!d) return;
+      d.live.map(adaptMatch).forEach(m      => live.push({ ...m, leagueLabel: l.short }));
+      d.upcoming.map(adaptMatch).forEach(m  => upcoming.push({ ...m, leagueLabel: l.short }));
+      d.completed.map(adaptMatch).forEach(m => completed.push({ ...m, leagueLabel: l.short }));
+    });
+    const byDate = (dir: 'asc' | 'desc') => (a: AdaptedMatch, b: AdaptedMatch) => {
+      const diff = new Date(a.date).getTime() - new Date(b.date).getTime();
+      return dir === 'asc' ? diff : -diff;
+    };
+    live.sort(byDate('asc'));
+    upcoming.sort(byDate('asc'));
+    completed.sort(byDate('desc'));
+    return live.length || upcoming.length || completed.length ? { live, upcoming, completed } : EMPTY_C;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cricketLeagues, ...cricketQs.map(q => q.data)]);
 
   const footballQ = useQuery({
     queryKey: ['homefeed:football'],
@@ -57,10 +87,10 @@ export function useHomeFeed(): HomeFeedResult {
   });
 
   return {
-    cricket:      cricketQ.data  ?? EMPTY_C,
+    cricket,
     football:     footballQ.data ?? EMPTY_F,
-    isLoading:    cricketQ.isLoading && footballQ.isLoading,
-    isRefetching: cricketQ.isRefetching || footballQ.isRefetching,
-    refetch: async () => { await Promise.all([cricketQ.refetch(), footballQ.refetch()]); },
+    isLoading:    cricketLoading && footballQ.isLoading,
+    isRefetching: cricketRefetching || footballQ.isRefetching,
+    refetch: async () => { await Promise.all([cricketRefetchAll(), footballQ.refetch()]); },
   };
 }
