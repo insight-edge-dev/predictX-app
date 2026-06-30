@@ -172,6 +172,52 @@ export function useHomeSections() {
   });
 }
 
+export interface RecentPredictionTeam {
+  name:      string;
+  shortName: string;
+  logo:      string;
+  score:     string | number | null;
+  overs:     string | null;
+}
+
+export interface RecentPrediction {
+  id:              number | string;
+  sport:           'cricket' | 'football';
+  leagueLabel:     string;
+  date:            string;
+  team1:           RecentPredictionTeam;
+  team2:           RecentPredictionTeam;
+  predictedWinner: string;
+  actualResult:    string | null;
+  resultText:      string | null;
+  isCorrect:       boolean | null;
+  isUpcoming:      boolean;
+}
+
+export interface LeagueCard {
+  slug:          string;
+  name:          string;
+  season:        string;
+  flag:          string;
+  short:         string;
+  image:         string;
+  sport:         'cricket' | 'football';
+  accuracy:      Accuracy;
+  recentMatches: RecentPrediction[];
+}
+
+export function useLeagueCards(limit = 5) {
+  return useQuery<LeagueCard[]>({
+    queryKey:             ['home:league-cards', limit],
+    queryFn:              () => api.get<{ cards: LeagueCard[] }>(`/home/league-cards?limit=${limit}`).then(d => d.cards),
+    staleTime:            5 * 60_000,
+    refetchOnMount:       false,
+    refetchOnWindowFocus: false,
+    retry:                1,
+    placeholderData:      (prev) => prev ?? [],
+  });
+}
+
 export interface Accuracy {
   percentage:         number;
   sampleSize:         number;

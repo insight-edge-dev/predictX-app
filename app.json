@@ -14,7 +14,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.insideedge.predictx"
+      "bundleIdentifier": "com.insideedge.cricvora"
     },
     "android": {
       "adaptiveIcon": {
@@ -23,8 +23,8 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "package": "com.insideedge.predictx",
-      "versionCode": 1
+      "package": "com.insideedge.cricvora",
+      "versionCode": 2
     },
     "web": {
       "favicon": "./assets/favicon.png",
@@ -33,7 +33,8 @@
     "plugins": [
       "expo-router",
       "expo-secure-store",
-      "expo-image"
+      "expo-image",
+      "expo-font"
     ],
     "extra": {
       "router": {},

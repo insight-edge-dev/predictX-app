@@ -86,8 +86,15 @@ export function LeagueProvider({ children }: { children: React.ReactNode }) {
           seen.add(l.id);
           return true;
         });
-        console.log(`[LeagueContext] loaded ${unique.length} leagues`);
-        if (unique.length > 0) setLeagues(unique);
+        // The dynamic /leagues endpoint returns every league Sportsmonks knows about
+        // (~24), but only the ones in FALLBACK_LEAGUES are actually wired up for match
+        // data end-to-end (leaguesConfig.js's LEAGUES/FOOTBALL_LEAGUES). Selecting any
+        // other dynamic-only league (e.g. "ecs_252") crashes downstream when match data
+        // is fetched for it, so the picker must never offer them.
+        const supportedIds = new Set(FALLBACK_LEAGUES.map(l => l.id));
+        const supported = unique.filter(l => supportedIds.has(l.id));
+        console.log(`[LeagueContext] loaded ${unique.length} leagues, ${supported.length} supported`);
+        if (supported.length > 0) setLeagues(supported);
       })
       .catch(e => console.error('[LeagueContext] fetch failed:', e));
   }, []);

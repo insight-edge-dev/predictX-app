@@ -10,7 +10,7 @@ import { countryFlagUrl } from '@/utils/flags';
 import { API_BASE_URL } from '@/config/api';
 import type { AdaptedMatch } from '@/utils/matchAdapter';
 import type { FootballMatch, FootballMatchWithTip } from '@/types/football';
-import type { NewsItem, RankingTeam, RankingPlayer } from '@/hooks/useHome';
+import type { NewsItem, RankingTeam, RankingPlayer, RecentPrediction, LeagueCard } from '@/hooks/useHome';
 import type { MatchWithTip } from '@/services/tipsService';
 import type { StandingsRow } from '@/services/matchService';
 
@@ -185,6 +185,187 @@ export function AccuracyBadge({ percentage, sampleSize, compact, label }: {
       <Text style={{ color: tint, fontSize: 8, fontWeight: '800', letterSpacing: 1 }}>
         ACCURACY
       </Text>
+    </View>
+  );
+}
+
+// ── LeagueTrackRecordCard ─────────────────────────────────────
+// One per-league card in the "PredictX Prediction" section — league branding
+// + that league's own accuracy + its most recent resolved predictions, each
+// showing what we predicted next to what actually happened.
+
+const CARD_ACCENTS = [colors.accent, '#7C3AED', C_FOOTBALL, '#F59E0B', '#06B6D4'];
+
+// One consistent size for every match row in a card.
+const ROW_SIZE = { badge: 26, nameFont: font.xs, scoreFont: 12, vsFont: 9, vsPadH: 8, vsPadV: 3, rowPad: 12, rowGap: 12, resultFont: 10, pillFont: 10, pillPadH: 8, pillPadV: 3, dot: 6, iconSize: 11 };
+
+function MatchTeams({ m, tier }: { m: RecentPrediction; tier: typeof ROW_SIZE }) {
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+      <View style={{ flex: 1, alignItems: 'center' }}>
+        <TeamBadge logo={m.team1.logo} code={m.team1.shortName} name={m.team1.name} size={tier.badge} />
+        <Text style={{ color: colors.textPrimary, fontSize: tier.nameFont, fontWeight: '800', marginTop: 2 }}>{m.team1.shortName}</Text>
+        {m.team1.score != null && (
+          <Text style={{ color: colors.textSecondary, fontSize: tier.scoreFont, fontWeight: '700', marginTop: 1 }}>
+            {m.team1.score}{m.team1.overs ? ` (${m.team1.overs})` : ''}
+          </Text>
+        )}
+      </View>
+      <View style={{ backgroundColor: colors.card, borderRadius: 10, paddingHorizontal: tier.vsPadH, paddingVertical: tier.vsPadV }}>
+        <Text style={{ color: colors.textMuted, fontSize: tier.vsFont, fontWeight: '700' }}>VS</Text>
+      </View>
+      <View style={{ flex: 1, alignItems: 'center' }}>
+        <TeamBadge logo={m.team2.logo} code={m.team2.shortName} name={m.team2.name} size={tier.badge} />
+        <Text style={{ color: colors.textPrimary, fontSize: tier.nameFont, fontWeight: '800', marginTop: 2 }}>{m.team2.shortName}</Text>
+        {m.team2.score != null && (
+          <Text style={{ color: colors.textSecondary, fontSize: tier.scoreFont, fontWeight: '700', marginTop: 1 }}>
+            {m.team2.score}{m.team2.overs ? ` (${m.team2.overs})` : ''}
+          </Text>
+        )}
+      </View>
+    </View>
+  );
+}
+
+export function LeagueTrackRecordCard({ card, index, defaultExpanded = true, onPressMatch }: {
+  card: LeagueCard; index: number; defaultExpanded?: boolean; onPressMatch: (m: RecentPrediction) => void;
+}) {
+  const [expanded, setExpanded] = useState(defaultExpanded);
+  const [showAll, setShowAll] = useState(false);
+  const accent = CARD_ACCENTS[index % CARD_ACCENTS.length];
+  const INITIAL_VISIBLE = 3;
+  const visibleMatches = !expanded ? [] : showAll ? card.recentMatches : card.recentMatches.slice(0, INITIAL_VISIBLE);
+  const hiddenCount = card.recentMatches.length - INITIAL_VISIBLE;
+
+  return (
+    <View style={{
+      backgroundColor: colors.card, borderRadius: radius.lg,
+      borderWidth: 1, borderColor: colors.border,
+      borderLeftWidth: 3, borderLeftColor: accent,
+      padding: spacing.md, marginBottom: spacing.md, overflow: 'hidden',
+      shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 8, shadowOffset: { width: 0, height: 3 },
+      elevation: 2,
+    }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flex: 1 }}>
+          {card.image ? (
+            <View style={{
+              width: 36, height: 36, borderRadius: 18, backgroundColor: '#FFFFFF',
+              borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
+            }}>
+              <Image source={{ uri: card.image }} style={{ width: 26, height: 26 }} resizeMode="contain" />
+            </View>
+          ) : (
+            <View style={{
+              width: 36, height: 36, borderRadius: 18, backgroundColor: accent + '15',
+              alignItems: 'center', justifyContent: 'center',
+            }}>
+              <Text style={{ color: accent, fontSize: 10, fontWeight: '900' }} numberOfLines={1}>{card.short}</Text>
+            </View>
+          )}
+          <View style={{ flex: 1 }}>
+            <View style={{
+              alignSelf: 'flex-start', backgroundColor: accent + '15', borderRadius: 8,
+              paddingHorizontal: 6, paddingVertical: 1, marginBottom: 2,
+            }}>
+              <Text style={{ color: accent, fontSize: 9, fontWeight: '800' }}>{card.season}</Text>
+            </View>
+            <Text style={{ color: colors.textPrimary, fontSize: font.sm, fontWeight: '800' }} numberOfLines={1}>
+              {card.name}
+            </Text>
+          </View>
+        </View>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+          {card.accuracy.sampleSize > 0 && (
+            <View style={{ alignItems: 'flex-end' }}>
+              <Text style={{ color: accent, fontSize: 18, fontWeight: '900', lineHeight: 20 }}>{card.accuracy.percentage}%</Text>
+              <Text style={{ color: colors.textMuted, fontSize: 8, fontWeight: '700' }}>Accuracy</Text>
+            </View>
+          )}
+          {card.recentMatches.length > 1 && (
+            <Pressable onPress={() => setExpanded(e => { if (e) setShowAll(false); return !e; })} hitSlop={8} style={{
+              width: 28, height: 28, borderRadius: 14, backgroundColor: colors.bg,
+              borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center',
+            }}>
+              <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={14} color={colors.textMuted} />
+            </Pressable>
+          )}
+        </View>
+      </View>
+
+      <View style={expanded ? { marginTop: spacing.sm } : undefined}>
+        {!expanded ? null : card.recentMatches.length === 0 ? (
+          <Text style={{ color: colors.textMuted, fontSize: font.xs, paddingVertical: spacing.sm }}>
+            No recent completed matches yet
+          </Text>
+        ) : (
+          visibleMatches.map((m) => {
+            const tier = ROW_SIZE;
+            if (m.isUpcoming) {
+              return (
+                <Pressable key={m.id} onPress={() => onPressMatch(m)} style={({ pressed }) => ({
+                  opacity: pressed ? 0.9 : 1,
+                  backgroundColor: colors.bg, borderRadius: radius.md,
+                  padding: tier.rowPad, marginTop: tier.rowGap,
+                  borderWidth: 1, borderColor: colors.accentDim,
+                })}>
+                  <MatchTeams m={m} tier={tier} />
+                  <View style={{
+                    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+                    marginTop: tier.rowGap, paddingHorizontal: 2,
+                  }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                      <Ionicons name="time-outline" size={tier.iconSize} color={colors.textMuted} />
+                      <Text style={{ color: colors.textMuted, fontSize: tier.resultFont, fontWeight: '600' }}>{shortDate(m.date)}</Text>
+                    </View>
+                    <View style={{ backgroundColor: colors.accentDim, borderRadius: 8, paddingHorizontal: tier.pillPadH, paddingVertical: tier.pillPadV }}>
+                      <Text style={{ color: accent, fontSize: tier.pillFont, fontWeight: '800' }}>Our pick: {m.predictedWinner}</Text>
+                    </View>
+                  </View>
+                </Pressable>
+              );
+            }
+
+            const tint = m.isCorrect ? colors.success : colors.danger;
+            return (
+              <Pressable key={m.id} onPress={() => onPressMatch(m)} style={({ pressed }) => ({
+                opacity: pressed ? 0.9 : 1,
+                backgroundColor: colors.bg, borderRadius: radius.md,
+                padding: tier.rowPad, marginTop: tier.rowGap,
+              })}>
+                <MatchTeams m={m} tier={tier} />
+                <View style={{
+                  flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+                  marginTop: tier.rowGap, paddingHorizontal: 2,
+                }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, flex: 1, marginRight: spacing.xs }}>
+                    <View style={{ width: tier.dot, height: tier.dot, borderRadius: tier.dot / 2, backgroundColor: tint }} />
+                    <Text style={{ color: colors.textSecondary, fontSize: tier.resultFont, fontWeight: '600', flex: 1 }} numberOfLines={1}>
+                      {m.resultText ?? m.actualResult}
+                    </Text>
+                  </View>
+                  <View style={{
+                    flexDirection: 'row', alignItems: 'center', gap: 3,
+                    backgroundColor: tint + '15', borderRadius: 8, paddingHorizontal: tier.pillPadH, paddingVertical: tier.pillPadV,
+                  }}>
+                    <Ionicons name={m.isCorrect ? 'checkmark-circle' : 'close-circle'} size={tier.pillFont + 2} color={tint} />
+                    <Text style={{ color: tint, fontSize: tier.pillFont, fontWeight: '800' }} numberOfLines={1}>PredictX</Text>
+                  </View>
+                </View>
+              </Pressable>
+            );
+          })
+        )}
+        {expanded && hiddenCount > 0 && (
+          <Pressable onPress={() => setShowAll(s => !s)} style={{
+            alignItems: 'center', paddingVertical: 8, marginTop: 4,
+          }}>
+            <Text style={{ color: accent, fontSize: font.xs, fontWeight: '800' }}>
+              {showAll ? 'Show less' : `Show ${hiddenCount} more`}
+            </Text>
+          </Pressable>
+        )}
+      </View>
     </View>
   );
 }

@@ -10,7 +10,8 @@ import { useHomeFeed } from '@/hooks/useHomeFeed';
 import { useWCHistoryStats } from '@/hooks/useWCHistoryStats';
 import { useFootballTips } from '@/hooks/useFootballTips';
 import { useWC2026Groups } from '@/hooks/useWC2026Groups';
-import { useHomeNews, useHomeRankings, useHomeFacts, useHomeSections, useAccuracy } from '@/hooks/useHome';
+import { useHomeNews, useHomeRankings, useHomeFacts, useHomeSections, useAccuracy, useLeagueCards } from '@/hooks/useHome';
+import type { RecentPrediction } from '@/hooks/useHome';
 import { useTipsList } from '@/hooks/useTips';
 import { useLeagueTable } from '@/hooks/useMatches';
 import type { SportTab } from '@/components/LeagueSheet';
@@ -24,7 +25,7 @@ import {
   CricketMatchCard, FootballMatchCard, NewsCard, AIPickCard, CricketPickCard,
   MiniStandingsTable, WCCountdownBanner,
   WC_FACTS, CRICKET_FACTS, fbFlag, WCStatCard, FactCard, RankingTeamCard, RankingPlayerCard,
-  AccuracyBadge,
+  AccuracyBadge, LeagueTrackRecordCard,
   type StatCard,
 } from '@/components/home/HomeShared';
 
@@ -83,6 +84,7 @@ export default function DiscoveryScreen({ onOpenLeagueSheet, onOpenDrawer, onNav
   const { data: rankings }         = useHomeRankings();
   const { data: homeSections = [] } = useHomeSections();
   const { data: accuracy }          = useAccuracy();
+  const { data: leagueCards = [], refetch: refetchLeagueCards } = useLeagueCards(5);
 
   // Partition by today / upcoming
   const cLive      = cricket.live;
@@ -183,6 +185,14 @@ export default function DiscoveryScreen({ onOpenLeagueSheet, onOpenDrawer, onNav
   function goToTips()     { router.push('/(tabs)/(tips)'); }
   function goToMatches()  { setLeagueId(league.id); router.push('/(tabs)/(matches)'); }
   function goToTip(id: string) { router.push(`/(tip-detail)/${id}` as any); }
+  function goToRecentPrediction(p: RecentPrediction) {
+    // Match-details has no sport param of its own — it renders cricket vs
+    // football based on the currently-selected league's sport, so that has
+    // to be set correctly before navigating (same as goToCricket/goToFootball).
+    if (p.sport === 'football') setLeagueId('wc2026');
+    else if (league.sport !== 'cricket') setLeagueId('ipl');
+    router.push(`/(match-details)/${p.id}` as any);
+  }
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
@@ -193,7 +203,7 @@ export default function DiscoveryScreen({ onOpenLeagueSheet, onOpenDrawer, onNav
           refreshControl={
             <RefreshControl
               refreshing={isRefetching}
-              onRefresh={refetch}
+              onRefresh={() => { refetch(); refetchLeagueCards(); }}
               tintColor={C_CRICKET}
               colors={[C_CRICKET, C_FOOTBALL]}
             />
@@ -205,7 +215,7 @@ export default function DiscoveryScreen({ onOpenLeagueSheet, onOpenDrawer, onNav
             paddingTop: spacing.sm, marginBottom: spacing.xl,
           }}>
             <View>
-              <Text style={{ color: colors.textPrimary, fontSize: 28, fontWeight: '900', letterSpacing: -0.5 }}>PredictX</Text>
+              <Text style={{ color: colors.textPrimary, fontSize: 32, fontFamily: 'BarlowCondensed_700Bold', letterSpacing: 0.3 }}>PredictX</Text>
               <Text style={{ color: colors.textSecondary, fontSize: font.xs, marginTop: 2 }}>{greeting()} · {fmtDate()}</Text>
             </View>
             <View style={{ flexDirection: 'row', gap: spacing.sm, alignItems: 'center' }}>
@@ -259,6 +269,25 @@ export default function DiscoveryScreen({ onOpenLeagueSheet, onOpenDrawer, onNav
 
           {/* ── Banners ────────────────────────────── */}
           <BannerCarousel placement="discovery" onNavigateLeagueHome={onNavigateLeagueHome} />
+
+          {/* ── PredictX Prediction (per-league track record) ────── */}
+          {leagueCards.length > 0 && (
+            <View style={{
+              marginBottom: spacing.xl, backgroundColor: colors.bg, borderRadius: radius.lg,
+              borderWidth: 1, borderColor: colors.border, padding: spacing.md,
+            }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: spacing.md }}>
+                <Ionicons name="trending-up" size={18} color={colors.accent} style={{ marginRight: 6 }} />
+                <Text style={{ color: colors.textPrimary, fontSize: font.md, fontWeight: '800' }}>PredictX Prediction</Text>
+              </View>
+              {leagueCards.map((card, i) => (
+                <LeagueTrackRecordCard key={card.slug} card={card} index={i} defaultExpanded={i === 0} onPressMatch={goToRecentPrediction} />
+              ))}
+              <Text style={{ color: colors.textMuted, fontSize: 10, textAlign: 'center', marginTop: spacing.xs }}>
+                Powered by PredictX AI
+              </Text>
+            </View>
+          )}
 
           {/* ── Live Now ───────────────────────────── */}
           {totalLive > 0 && (
