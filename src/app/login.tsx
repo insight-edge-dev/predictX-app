@@ -155,8 +155,9 @@ export default function AuthScreen() {
     return () => clearInterval(t);
   }, [cooldown]);
 
-  // Android: SMS User Consent — shows a native dialog when OTP arrives,
-  // user taps Allow and the code fills in automatically.
+  // Android: SMS User Consent API — when OTP SMS arrives, Android shows a
+  // native system dialog; user taps Allow and the code fills in automatically.
+  // Works even with Truecaller installed (unlike SMS Retriever).
   useEffect(() => {
     if (step !== 'otp' || Platform.OS !== 'android') return;
     let active = true;
