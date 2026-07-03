@@ -155,20 +155,26 @@ export default function AuthScreen() {
     return () => clearInterval(t);
   }, [cooldown]);
 
-  // Android: start SMS Retriever when OTP step opens, auto-fill on match
+  // Android: SMS User Consent — shows a native dialog when OTP arrives,
+  // user taps Allow and the code fills in automatically.
   useEffect(() => {
     if (step !== 'otp' || Platform.OS !== 'android') return;
-    let OtpVerify: any;
-    try { OtpVerify = require('react-native-otp-verify').default; } catch { return; }
-    OtpVerify.getOtp()
-      .then(() => {
-        OtpVerify.addListener((message: string) => {
-          const match = /\b(\d{6})\b/.exec(message);
-          if (match) setOtp(match[1]);
-        });
+    let active = true;
+    let SMSUserConsent: any;
+    try { SMSUserConsent = require('react-native-sms-user-consent').default; } catch { return; }
+
+    SMSUserConsent.listenOTP()
+      .then(({ receivedOtpMessage }: { receivedOtpMessage: string }) => {
+        if (!active) return;
+        const match = /\b(\d{6})\b/.exec(receivedOtpMessage);
+        if (match) setOtp(match[1]);
       })
       .catch(() => {});
-    return () => { try { OtpVerify?.removeAllListeners(); } catch {} };
+
+    return () => {
+      active = false;
+      try { SMSUserConsent.removeOTPListener(); } catch {}
+    };
   }, [step]);
 
   // Auto-submit once all 6 digits are filled (works for both manual + auto-read)
