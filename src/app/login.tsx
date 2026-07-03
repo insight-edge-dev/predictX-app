@@ -155,6 +155,17 @@ export default function AuthScreen() {
     return () => clearInterval(t);
   }, [cooldown]);
 
+  const [debugHash, setDebugHash] = useState<string>('');
+
+  // TEMP: show the real device hash on screen so we can update ANDROID_APP_HASH
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    try {
+      const OtpVerify = require('react-native-otp-verify').default;
+      OtpVerify.getHash().then((hashes: string[]) => setDebugHash(hashes.join(', '))).catch(() => {});
+    } catch {}
+  }, []);
+
   // Android: start SMS Retriever when OTP step opens, auto-fill on match
   useEffect(() => {
     if (step !== 'otp' || Platform.OS !== 'android') return;
@@ -355,6 +366,12 @@ export default function AuthScreen() {
                 </View>
 
                 <OtpInput value={otp} onChange={setOtp} />
+
+                {Platform.OS === 'android' && !!debugHash && (
+                  <Text style={{ color: colors.textMuted, fontSize: 10, textAlign: 'center', fontFamily: 'monospace' }}>
+                    hash: {debugHash}
+                  </Text>
+                )}
 
                 {error && <ErrorBox msg={error} />}
 
