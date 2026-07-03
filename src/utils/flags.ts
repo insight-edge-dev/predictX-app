@@ -7,13 +7,11 @@
  * every country that can show up across cricket and football fixtures,
  * plus full country names (used by some API fields, e.g. ICC rankings).
  *
- * Returns null when no mapping exists — true sub-national teams with no
- * ISO2 of their own (England, Scotland, Wales, Northern Ireland) included.
- * Callers should fall back to a logo/initials badge in that case, not an
- * emoji.
+ * Returns null when no mapping exists — callers should fall back to a
+ * logo/initials badge in that case, not an emoji.
  */
 
-// 3-letter short code → ISO 3166-1 alpha-2
+// 3-letter short code → ISO 3166-1 alpha-2 (or flagcdn sub-national code)
 const CODE_ISO2: Record<string, string> = {
   // Cricket nations
   IND: 'in', AUS: 'au', PAK: 'pk', SA: 'za', RSA: 'za', NZ: 'nz', SL: 'lk',
@@ -21,6 +19,9 @@ const CODE_ISO2: Record<string, string> = {
   UAE: 'ae', USA: 'us', CAN: 'ca', NAM: 'na', OMA: 'om', PNG: 'pg', KEN: 'ke',
   UGA: 'ug', QAT: 'qa', HKG: 'hk', SIN: 'sg', MAS: 'my', VAN: 'vu', BHU: 'bt',
   BHR: 'bh', KUW: 'kw', SAU: 'sa', MLT: 'mt',
+
+  // UK home nations (flagcdn.com supports gb-eng / gb-sct / gb-wls / gb-nir)
+  ENG: 'gb-eng', SCO: 'gb-sct', WAL: 'gb-wls', NIR: 'gb-nir',
 
   // Europe
   GER: 'de', ITA: 'it', FRA: 'fr', ESP: 'es', POR: 'pt', BEL: 'be', SUI: 'ch',
@@ -67,6 +68,7 @@ const NAME_ISO2: Record<string, string> = {
   IRELAND: 'ie', ZIMBABWE: 'zw', NETHERLANDS: 'nl', NEPAL: 'np',
   'UNITED ARAB EMIRATES': 'ae', 'UNITED STATES': 'us', CANADA: 'ca',
   NAMIBIA: 'na', OMAN: 'om', 'PAPUA NEW GUINEA': 'pg', KENYA: 'ke',
+  ENGLAND: 'gb-eng', SCOTLAND: 'gb-sct', WALES: 'gb-wls', 'NORTHERN IRELAND': 'gb-nir',
   BRAZIL: 'br', GERMANY: 'de', ITALY: 'it', ARGENTINA: 'ar', FRANCE: 'fr',
   URUGUAY: 'uy', SPAIN: 'es', PORTUGAL: 'pt', BELGIUM: 'be', SWITZERLAND: 'ch',
   CROATIA: 'hr', MEXICO: 'mx', SENEGAL: 'sn', MOROCCO: 'ma', JAPAN: 'jp',

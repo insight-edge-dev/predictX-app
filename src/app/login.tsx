@@ -81,6 +81,7 @@ const OtpInput = memo(function OtpInput({
         onChangeText={(t) => onChange(t.replace(/\D/g, '').slice(0, 6))}
         keyboardType="number-pad"
         maxLength={6}
+        textContentType="oneTimeCode"
         style={{ position: 'absolute', opacity: 0, width: 1, height: 1 }}
       />
     </Pressable>
@@ -153,6 +154,28 @@ export default function AuthScreen() {
     const t = setInterval(() => setCooldown((c) => c - 1), 1000);
     return () => clearInterval(t);
   }, [cooldown]);
+
+  // Android: start SMS Retriever when OTP step opens, auto-fill on match
+  useEffect(() => {
+    if (step !== 'otp' || Platform.OS !== 'android') return;
+    let OtpVerify: any;
+    try { OtpVerify = require('react-native-otp-verify').default; } catch { return; }
+    OtpVerify.getOtp()
+      .then(() => {
+        OtpVerify.addListener((message: string) => {
+          const match = /\b(\d{6})\b/.exec(message);
+          if (match) setOtp(match[1]);
+        });
+      })
+      .catch(() => {});
+    return () => { try { OtpVerify?.removeAllListeners(); } catch {} };
+  }, [step]);
+
+  // Auto-submit once all 6 digits are filled (works for both manual + auto-read)
+  useEffect(() => {
+    if (otp.length === 6 && step === 'otp' && !loading) handleVerifyOtp();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [otp]);
 
   const tabAnim = useRef(new Animated.Value(mode === 'login' ? 0 : 1)).current;
 
