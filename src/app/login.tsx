@@ -155,30 +155,7 @@ export default function AuthScreen() {
     return () => clearInterval(t);
   }, [cooldown]);
 
-  // Android: SMS User Consent API — when OTP SMS arrives, Android shows a
-  // native system dialog; user taps Allow and the code fills in automatically.
-  // Works even with Truecaller installed (unlike SMS Retriever).
-  useEffect(() => {
-    if (step !== 'otp' || Platform.OS !== 'android') return;
-    let active = true;
-    let SMSUserConsent: any;
-    try { SMSUserConsent = require('react-native-sms-user-consent').default; } catch { return; }
-
-    SMSUserConsent.listenOTP()
-      .then(({ receivedOtpMessage }: { receivedOtpMessage: string }) => {
-        if (!active) return;
-        const match = /\b(\d{6})\b/.exec(receivedOtpMessage);
-        if (match) setOtp(match[1]);
-      })
-      .catch(() => {});
-
-    return () => {
-      active = false;
-      try { SMSUserConsent.removeOTPListener(); } catch {}
-    };
-  }, [step]);
-
-  // Auto-submit once all 6 digits are filled (works for both manual + auto-read)
+  // Auto-submit once all 6 digits are filled
   useEffect(() => {
     if (otp.length === 6 && step === 'otp' && !loading) handleVerifyOtp();
   // eslint-disable-next-line react-hooks/exhaustive-deps
