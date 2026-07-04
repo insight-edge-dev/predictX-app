@@ -809,21 +809,32 @@ function footballGroupByDate(matches: FootballMatch[]): FootballSection[] {
   return Array.from(map.entries()).map(([title, data]) => ({ title, data }));
 }
 
-function footballGroupByStageThenDate(matches: FootballMatch[]): FootballSection[] {
+// reverseStage=true for Results view (most recent round first, group stage last)
+// reverseStage=false for Fixtures view (group stage first, then knockout in round order)
+function footballGroupByStageThenDate(matches: FootballMatch[], reverseStage = false): FootballSection[] {
   const hasKnockout = matches.some(m => KNOCKOUT_STAGES.has(m.stage as string));
   if (!hasKnockout) return footballGroupByDate(matches);
 
-  // Group stage: by date, knockout: by round
   const groupStage = matches.filter(m => m.stage === 'Group Stage');
   const knockout   = matches.filter(m => KNOCKOUT_STAGES.has(m.stage as string));
 
   const sections: FootballSection[] = [];
-  if (groupStage.length > 0) sections.push(...footballGroupByDate(groupStage));
-
   const stageOrder = ['Round of 32', 'Round of 16', 'Quarter-Final', 'Semi-Final', '3rd Place', 'Final'];
-  for (const stage of stageOrder) {
-    const ms = knockout.filter(m => m.stage === stage);
-    if (ms.length > 0) sections.push({ title: stage, data: ms, isStage: true });
+
+  if (reverseStage) {
+    // Results: Final → Semi → QF → R16 → R32 at top, Group Stage below
+    for (const stage of [...stageOrder].reverse()) {
+      const ms = knockout.filter(m => m.stage === stage);
+      if (ms.length > 0) sections.push({ title: stage, data: ms, isStage: true });
+    }
+    if (groupStage.length > 0) sections.push(...footballGroupByDate(groupStage));
+  } else {
+    // Fixtures: Group Stage first, then knockout in ascending round order
+    if (groupStage.length > 0) sections.push(...footballGroupByDate(groupStage));
+    for (const stage of stageOrder) {
+      const ms = knockout.filter(m => m.stage === stage);
+      if (ms.length > 0) sections.push({ title: stage, data: ms, isStage: true });
+    }
   }
 
   return sections;
@@ -938,9 +949,10 @@ function FootballMatchesScreen({ initialTab }: { initialTab?: FootballTab | null
     [upcomingMatches],
   );
   const resultsSections  = useMemo(
-    () => footballGroupByStageThenDate([...completedMatches].sort(
-      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
-    )),
+    () => footballGroupByStageThenDate(
+      [...completedMatches].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
+      true, // reverseStage: most recent round (R16, QF...) at top, Group Stage below
+    ),
     [completedMatches],
   );
 

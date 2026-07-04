@@ -24,7 +24,8 @@ export function useFootballMatches(): FootballMatchCategories {
         completed: adaptFootballMatches(res.completed ?? []),
       };
     },
-    staleTime:       30 * 1000,   // 30s
+    staleTime:        30 * 1000,   // 30s
+    refetchOnMount:   true,        // always check for fresh data when navigating to WC screen
     refetchInterval: (query) => {
       // Poll faster if there are live matches
       const live = query.state.data?.live ?? [];
