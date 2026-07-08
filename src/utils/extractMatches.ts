@@ -128,41 +128,23 @@ export function extractMatchesFromResponse(data: unknown): Match[] {
   const raw = data as Record<string, unknown>;
   const matches: Match[] = [];
 
-  // Log raw structure — critical for debugging
-  console.log("[Extract] top-level keys:", Object.keys(raw).join(", "));
-
   const typeMatches = raw["typeMatches"];
 
-  // Log enough to understand nesting without flooding
-  if (Array.isArray(typeMatches)) {
-    console.log(`[Extract] typeMatches.length=${typeMatches.length}`);
-    if (typeMatches.length > 0) {
-      const first = typeMatches[0] as Record<string, unknown>;
-      console.log("[Extract] first typeMatch keys:", Object.keys(first).join(", "));
-      try {
-        console.log("[Extract] first typeMatch snippet:", JSON.stringify(first).slice(0, 400));
-      } catch { /* */ }
-    }
-  } else {
-    console.log("[Extract] typeMatches missing — deep scan fallback");
+  if (!Array.isArray(typeMatches)) {
     const nodes = deepFindNodes(data);
     for (const m of nodes) {
       const info = m["matchInfo"] as Record<string, unknown> | undefined;
       const parsed = parseMatchNode(m, str(info?.["seriesName"]), matches.length);
       if (parsed) matches.push(parsed);
     }
-    console.log(`[Extract] deep scan: ${matches.length} matches`);
     return matches;
   }
 
   // Standard traversal: typeMatches → seriesMatches → wrapper → matches
   for (const typeMatch of typeMatches) {
     const tm = typeMatch as Record<string, unknown>;
-    const matchType = str(tm["matchType"]);
     const seriesMatches = tm["seriesMatches"];
     if (!Array.isArray(seriesMatches)) continue;
-
-    console.log(`[Extract] matchType="${matchType}" seriesMatches=${seriesMatches.length}`);
 
     for (const sm of seriesMatches) {
       const smObj = sm as Record<string, unknown>;
@@ -175,15 +157,10 @@ export function extractMatchesFromResponse(data: unknown): Match[] {
         (smObj["seriesName"] != null && smObj["matches"] != null ? smObj : undefined)
       ) as Record<string, unknown> | undefined;
 
-      if (!wrapper) {
-        console.log("[Extract] no wrapper, sm keys:", Object.keys(smObj).join(", "));
-        continue;
-      }
+      if (!wrapper) continue;
 
       const seriesName = str(wrapper["seriesName"]);
       const rawMatches = wrapper["matches"];
-      console.log(`[Extract] series="${seriesName}" matchCount=${Array.isArray(rawMatches) ? rawMatches.length : "none"}`);
-
       if (!Array.isArray(rawMatches)) continue;
 
       for (const rm of rawMatches) {
@@ -195,16 +172,13 @@ export function extractMatchesFromResponse(data: unknown): Match[] {
 
   // Deep scan if normal traversal got nothing but response had data
   if (matches.length === 0 && (typeMatches as unknown[]).length > 0) {
-    console.log("[Extract] normal traversal returned 0 — deep scan fallback");
     const nodes = deepFindNodes(data);
     for (const m of nodes) {
       const info = m["matchInfo"] as Record<string, unknown> | undefined;
       const parsed = parseMatchNode(m, str(info?.["seriesName"]), matches.length);
       if (parsed) matches.push(parsed);
     }
-    console.log(`[Extract] deep scan: ${matches.length} matches`);
   }
 
-  console.log(`[Extract] total=${matches.length}`);
   return matches;
 }

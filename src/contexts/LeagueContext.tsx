@@ -62,7 +62,6 @@ export function LeagueProvider({ children }: { children: React.ReactNode }) {
   // Fetch full league list from backend as soon as the app starts.
   // Runs inside the provider so it fires before any screen mounts.
   useEffect(() => {
-    console.log('[LeagueContext] fetching leagues...');
     api.get<{ leagues: any[] }>('/leagues')
       .then(data => {
         const list: League[] = (data.leagues ?? []).map(l => ({
@@ -93,7 +92,6 @@ export function LeagueProvider({ children }: { children: React.ReactNode }) {
         // is fetched for it, so the picker must never offer them.
         const supportedIds = new Set(FALLBACK_LEAGUES.map(l => l.id));
         const supported = unique.filter(l => supportedIds.has(l.id));
-        console.log(`[LeagueContext] loaded ${unique.length} leagues, ${supported.length} supported`);
         if (supported.length > 0) setLeagues(supported);
       })
       .catch(e => console.error('[LeagueContext] fetch failed:', e));

@@ -16,6 +16,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.insideedge.cricvora"
     },
+    "newArchEnabled": true,
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#0A0A0F",

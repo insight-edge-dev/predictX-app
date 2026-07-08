@@ -13,9 +13,9 @@ import {
   View,
   Text,
   Pressable,
-  Image,
   Animated,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { memo, useRef, useEffect } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -62,7 +62,7 @@ function TeamLogo({ logo, shortName, size }: { logo: string; shortName: string; 
       <Image
         source={{ uri: url }}
         style={{ width: size, height: size }}
-        resizeMode="contain"
+        contentFit="contain"
       />
     );
   }
@@ -490,7 +490,7 @@ export const FeaturedMatchCard = memo(function FeaturedMatchCard({
               {/* Team 1 */}
               <View style={{ flex: 1, alignItems: 'center', gap: spacing.sm }}>
                 {logo1 ? (
-                  <Image source={{ uri: logo1 }} style={{ width: 56, height: 56 }} resizeMode="contain" />
+                  <Image source={{ uri: logo1 }} style={{ width: 56, height: 56 }} contentFit="contain" />
                 ) : (
                   <View
                     style={{
@@ -542,7 +542,7 @@ export const FeaturedMatchCard = memo(function FeaturedMatchCard({
               {/* Team 2 */}
               <View style={{ flex: 1, alignItems: 'center', gap: spacing.sm }}>
                 {logo2 ? (
-                  <Image source={{ uri: logo2 }} style={{ width: 56, height: 56 }} resizeMode="contain" />
+                  <Image source={{ uri: logo2 }} style={{ width: 56, height: 56 }} contentFit="contain" />
                 ) : (
                   <View
                     style={{

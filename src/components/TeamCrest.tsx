@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { View, Text, Image } from 'react-native';
+import { View, Text } from 'react-native';
+import { Image } from 'expo-image';
 import { SvgUri } from 'react-native-svg';
 
 interface Props {
@@ -42,7 +43,7 @@ export function TeamCrest({ logo, flag, size = 20 }: Props) {
       <Image
         source={{ uri: logo }}
         style={{ width: size, height: size }}
-        resizeMode="contain"
+        contentFit="contain"
         onError={() => setFailed(true)}
       />
     );
