@@ -1129,7 +1129,6 @@ function FootballHomeScreen() {
                 </View>
               </Pressable>
               <Text style={{ color: colors.textPrimary, fontSize: 26, fontWeight: '800', letterSpacing: -0.5 }}>PredictX</Text>
-              <Text style={{ color: colors.textSecondary, fontSize: font.sm, marginTop: 2 }}>{greeting()} · {formatDate()}</Text>
             </View>
             <View style={{ flexDirection: 'row', gap: spacing.sm, alignItems: 'center' }}>
               <Pressable onPress={() => setDrawerOpen(true)} style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1, width: 36, height: 36, borderRadius: 18, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' })}>
@@ -1610,7 +1609,6 @@ function CricketHomeScreen() {
                   <Text style={{ color: colors.textMuted, fontSize: font.xs }}>{formatDate()}</Text>
                 </View>
                 <Text style={{ color: colors.textPrimary, fontSize: font.xxl, fontWeight: '800', letterSpacing: -0.5 }}>PredictX</Text>
-                <Text style={{ color: colors.textSecondary, fontSize: font.sm, marginTop: 2 }}>{greeting()}</Text>
               </View>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: 4 }}>
                 {liveMatch && (

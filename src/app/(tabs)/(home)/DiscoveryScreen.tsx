@@ -216,7 +216,6 @@ export default function DiscoveryScreen({ onOpenLeagueSheet, onOpenDrawer, onNav
           }}>
             <View>
               <Text style={{ color: colors.textPrimary, fontSize: 32, fontFamily: 'BarlowCondensed_700Bold', letterSpacing: 0.3 }}>PredictX</Text>
-              <Text style={{ color: colors.textSecondary, fontSize: font.xs, marginTop: 2 }}>{greeting()} · {fmtDate()}</Text>
             </View>
             <View style={{ flexDirection: 'row', gap: spacing.sm, alignItems: 'center' }}>
               {accuracy && (
