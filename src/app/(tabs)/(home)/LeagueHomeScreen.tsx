@@ -1,5 +1,5 @@
 import {
-  View, Text, ScrollView, Pressable, RefreshControl,
+  View, Text, ScrollView, Pressable, RefreshControl, Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -56,35 +56,30 @@ function LeagueHomeHeader({ onOpenLeagueSheet, onOpenDrawer }: Props) {
         flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
         paddingTop: spacing.sm, marginBottom: spacing.lg,
       }}>
-        <View>
-          <Text style={{ color: colors.textPrimary, fontSize: 28, fontFamily: 'Geist_800ExtraBold', letterSpacing: -0.5 }}>PredictX</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <Image
+            source={require('../../../../assets/icon.png')}
+            style={{ width: 38, height: 38, borderRadius: 10 }}
+            resizeMode="cover"
+          />
+          <Text style={{ color: colors.textPrimary, fontSize: 26, fontFamily: 'Geist_800ExtraBold', letterSpacing: -0.5 }}>PredictX</Text>
         </View>
-        <View style={{ flexDirection: 'row', gap: spacing.sm, alignItems: 'center' }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
           {accuracy && (
             <AccuracyBadge percentage={accuracy.percentage} sampleSize={accuracy.sampleSize} label={league.short} />
           )}
           <Pressable
             onPress={() => router.push('/(settings)/notifications' as any)}
-            style={({ pressed }) => ({
-              opacity: pressed ? 0.7 : 1,
-              width: 38, height: 38, borderRadius: 19,
-              backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border,
-              alignItems: 'center', justifyContent: 'center',
-            })}>
-            <Ionicons name="notifications-outline" size={18} color={colors.textPrimary} />
+            style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1, width: 40, height: 40, alignItems: 'center', justifyContent: 'center' })}>
+            <Ionicons name="notifications-outline" size={22} color={colors.textPrimary} />
             {unreadCount > 0 && (
               <View style={{ position: 'absolute', top: 7, right: 7, width: 7, height: 7, borderRadius: 4, backgroundColor: C_LIVE }} />
             )}
           </Pressable>
           <Pressable
             onPress={onOpenDrawer}
-            style={({ pressed }) => ({
-              opacity: pressed ? 0.7 : 1,
-              width: 38, height: 38, borderRadius: 19,
-              backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border,
-              alignItems: 'center', justifyContent: 'center',
-            })}>
-            <Ionicons name="menu-outline" size={20} color={colors.textPrimary} />
+            style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1, width: 40, height: 40, alignItems: 'center', justifyContent: 'center' })}>
+            <Ionicons name="menu-outline" size={24} color={colors.textPrimary} />
           </Pressable>
         </View>
       </View>

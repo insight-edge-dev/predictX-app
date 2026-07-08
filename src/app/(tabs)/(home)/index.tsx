@@ -1117,22 +1117,29 @@ function FootballHomeScreen() {
         >
           {/* ── Header ─────────────────────────────────── */}
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: spacing.sm, marginBottom: spacing.lg }}>
-            <View>
-              <Pressable
-                onPress={() => setSheetOpen(true)}
-                style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1, flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 4 })}
-              >
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#F0FDF4', borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4, borderWidth: 1, borderColor: '#BBF7D0' }}>
-                  <Text style={{ fontSize: 12 }}>{league.flag}</Text>
-                  <Text style={{ color: '#16A34A', fontSize: font.xs, fontWeight: '700' }}>{league.short} {league.season}</Text>
-                  <Ionicons name="chevron-down" size={12} color="#16A34A" />
-                </View>
-              </Pressable>
-              <Text style={{ color: colors.textPrimary, fontSize: 26, fontFamily: 'Geist_800ExtraBold', letterSpacing: -0.5 }}>PredictX</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Image
+                source={require('../../../../assets/icon.png')}
+                style={{ width: 38, height: 38, borderRadius: 10 }}
+                resizeMode="cover"
+              />
+              <View>
+                <Pressable
+                  onPress={() => setSheetOpen(true)}
+                  style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1, flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 2 })}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#F0FDF4', borderRadius: 20, paddingHorizontal: 10, paddingVertical: 3, borderWidth: 1, borderColor: '#BBF7D0' }}>
+                    <Text style={{ fontSize: 11 }}>{league.flag}</Text>
+                    <Text style={{ color: '#16A34A', fontSize: font.xs, fontWeight: '700' }}>{league.short} {league.season}</Text>
+                    <Ionicons name="chevron-down" size={11} color="#16A34A" />
+                  </View>
+                </Pressable>
+                <Text style={{ color: colors.textPrimary, fontSize: 26, fontFamily: 'Geist_800ExtraBold', letterSpacing: -0.5 }}>PredictX</Text>
+              </View>
             </View>
-            <View style={{ flexDirection: 'row', gap: spacing.sm, alignItems: 'center' }}>
-              <Pressable onPress={() => setDrawerOpen(true)} style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1, width: 36, height: 36, borderRadius: 18, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' })}>
-                <Ionicons name="menu-outline" size={20} color={colors.textPrimary} />
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
+              <Pressable onPress={() => setDrawerOpen(true)} style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1, width: 40, height: 40, alignItems: 'center', justifyContent: 'center' })}>
+                <Ionicons name="menu-outline" size={24} color={colors.textPrimary} />
               </Pressable>
             </View>
           </View>
@@ -1587,10 +1594,14 @@ function CricketHomeScreen() {
           <View style={{ paddingHorizontal: spacing.lg }}>
 
             {/* ── Header ── */}
-            <View style={{ paddingTop: spacing.xl, paddingBottom: spacing.xl, flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-              <View>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                  {/* League badge — tap to open selector */}
+            <View style={{ paddingTop: spacing.xl, paddingBottom: spacing.xl, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Image
+                  source={require('../../../../assets/icon.png')}
+                  style={{ width: 38, height: 38, borderRadius: 10 }}
+                  resizeMode="cover"
+                />
+                <View>
                   <Pressable
                     onPress={() => setSheetOpen(true)}
                     style={({ pressed }) => ({
@@ -1599,6 +1610,7 @@ function CricketHomeScreen() {
                       backgroundColor: colors.accentDim, borderRadius: 6,
                       paddingHorizontal: 8, paddingVertical: 3,
                       borderWidth: 1, borderColor: colors.accent + '25',
+                      marginBottom: 2, alignSelf: 'flex-start',
                     })}
                   >
                     <Text style={{ color: colors.accent, fontSize: font.xs, fontWeight: '800', letterSpacing: 1 }}>
@@ -1606,49 +1618,31 @@ function CricketHomeScreen() {
                     </Text>
                     <Ionicons name="chevron-down" size={10} color={colors.accent} />
                   </Pressable>
-                  <Text style={{ color: colors.textMuted, fontSize: font.xs }}>{formatDate()}</Text>
+                  <Text style={{ color: colors.textPrimary, fontSize: font.xxl, fontFamily: 'Geist_800ExtraBold', letterSpacing: -0.5 }}>PredictX</Text>
                 </View>
-                <Text style={{ color: colors.textPrimary, fontSize: font.xxl, fontFamily: 'Geist_800ExtraBold', letterSpacing: -0.5 }}>PredictX</Text>
               </View>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: 4 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
                 {liveMatch && (
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: colors.live + '15', borderRadius: 20, paddingHorizontal: 12, paddingVertical: 7, borderWidth: 1, borderColor: colors.live + '30' }}>
-                    <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: colors.live }} />
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: colors.live + '15', borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: colors.live + '30' }}>
+                    <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: colors.live }} />
                     <Text style={{ color: colors.live, fontSize: font.xs, fontWeight: '800', letterSpacing: 0.5 }}>LIVE</Text>
                   </View>
                 )}
-                {/* Search */}
                 <Pressable
                   onPress={() => router.push('/(search)' as any)}
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  style={({ pressed }) => ({
-                    opacity: pressed ? 0.7 : 1,
-                    width: 36, height: 36, borderRadius: 10,
-                    backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border,
-                    alignItems: 'center', justifyContent: 'center',
-                  })}
+                  style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1, width: 40, height: 40, alignItems: 'center', justifyContent: 'center' })}
                 >
-                  <Ionicons name="search-outline" size={18} color={colors.textPrimary} />
+                  <Ionicons name="search-outline" size={22} color={colors.textPrimary} />
                 </Pressable>
-                {/* Hamburger */}
                 <Pressable
                   onPress={() => setDrawerOpen(true)}
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  style={({ pressed }) => ({
-                    opacity: pressed ? 0.7 : 1,
-                    width: 36, height: 36, borderRadius: 10,
-                    backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border,
-                    alignItems: 'center', justifyContent: 'center',
-                  })}
+                  style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1, width: 40, height: 40, alignItems: 'center', justifyContent: 'center' })}
                 >
-                  <Ionicons name="menu" size={20} color={colors.textPrimary} />
+                  <Ionicons name="menu" size={24} color={colors.textPrimary} />
                   {unreadCount > 0 && (
-                    <View style={{
-                      position: 'absolute', top: -3, right: -3,
-                      width: 10, height: 10, borderRadius: 5,
-                      backgroundColor: '#ef4444',
-                      borderWidth: 1.5, borderColor: colors.bg,
-                    }} />
+                    <View style={{ position: 'absolute', top: 6, right: 6, width: 8, height: 8, borderRadius: 4, backgroundColor: '#ef4444', borderWidth: 1.5, borderColor: colors.bg }} />
                   )}
                 </Pressable>
               </View>
