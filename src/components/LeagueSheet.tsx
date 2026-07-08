@@ -57,12 +57,12 @@ export function LeagueSheet({ visible, onClose, initialSport, onSelect }: Props)
     router.push('/(international)');
   };
 
-  // Only show 2026-season leagues — the dynamic /leagues feed includes many
-  // older/off-season tournaments (2025, 2025/26, 2018, etc.) that clutter the picker.
-  const is2026 = (l: League) => l.season === '2026';
+  // Show current-cycle leagues: 2026 or 2025/26 season tags.
+  // BBL and BPL use "2025/26" while other leagues use "2026" — both are current.
+  const isCurrent = (l: League) => l.season === '2026' || l.season === '2025/26';
 
-  const cricketLeagues  = leagues.filter(l => (l.sport === 'cricket' || !l.sport) && is2026(l));
-  const footballLeagues = leagues.filter(l => l.sport === 'football' && is2026(l));
+  const cricketLeagues  = leagues.filter(l => (l.sport === 'cricket' || !l.sport) && isCurrent(l));
+  const footballLeagues = leagues.filter(l => l.sport === 'football' && isCurrent(l));
   const visibleLeagues  = sportTab === 'football' ? footballLeagues : cricketLeagues;
 
   // Mark leagues whose season has already finished (completed matches, none upcoming/live)
