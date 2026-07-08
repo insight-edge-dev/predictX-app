@@ -215,7 +215,7 @@ export default function DiscoveryScreen({ onOpenLeagueSheet, onOpenDrawer, onNav
             paddingTop: spacing.sm, marginBottom: spacing.xl,
           }}>
             <View>
-              <Text style={{ color: colors.textPrimary, fontSize: 32, fontFamily: 'BarlowCondensed_700Bold', letterSpacing: 0.3 }}>PredictX</Text>
+              <Text style={{ color: colors.textPrimary, fontSize: 28, fontFamily: 'Geist_800ExtraBold', letterSpacing: -0.5 }}>PredictX</Text>
             </View>
             <View style={{ flexDirection: 'row', gap: spacing.sm, alignItems: 'center' }}>
               {accuracy && (

@@ -57,7 +57,7 @@ function LeagueHomeHeader({ onOpenLeagueSheet, onOpenDrawer }: Props) {
         paddingTop: spacing.sm, marginBottom: spacing.lg,
       }}>
         <View>
-          <Text style={{ color: colors.textPrimary, fontSize: 28, fontWeight: '900', letterSpacing: -0.5 }}>PredictX</Text>
+          <Text style={{ color: colors.textPrimary, fontSize: 28, fontFamily: 'Geist_800ExtraBold', letterSpacing: -0.5 }}>PredictX</Text>
         </View>
         <View style={{ flexDirection: 'row', gap: spacing.sm, alignItems: 'center' }}>
           {accuracy && (

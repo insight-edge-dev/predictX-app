@@ -3,6 +3,7 @@ import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { View } from "react-native";
 import { useFonts, BarlowCondensed_700Bold } from "@expo-google-fonts/barlow-condensed";
+import { Geist_800ExtraBold } from "@expo-google-fonts/geist";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { LeagueProvider } from "@/contexts/LeagueContext";
@@ -25,7 +26,7 @@ const queryClient = new QueryClient({
 });
 
 export default function RootLayout() {
-  const [fontsLoaded] = useFonts({ BarlowCondensed_700Bold });
+  const [fontsLoaded] = useFonts({ BarlowCondensed_700Bold, Geist_800ExtraBold });
   if (!fontsLoaded) return null;
 
   return (
