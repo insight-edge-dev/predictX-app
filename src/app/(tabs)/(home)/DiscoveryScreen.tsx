@@ -11,12 +11,14 @@ import { useWCHistoryStats } from '@/hooks/useWCHistoryStats';
 import { useFootballTips } from '@/hooks/useFootballTips';
 import { useWC2026Groups } from '@/hooks/useWC2026Groups';
 import { useHomeNews, useHomeRankings, useHomeFacts, useHomeSections, useAccuracy, useLeagueCards } from '@/hooks/useHome';
+import { useInternationalSeries } from '@/hooks/useInternational';
 import type { RecentPrediction } from '@/hooks/useHome';
 import { useTipsList } from '@/hooks/useTips';
 import { useLeagueTable } from '@/hooks/useMatches';
 import type { SportTab } from '@/components/LeagueSheet';
 import { GroupTable } from '@/components/GroupTable';
 import { BannerCarousel } from '@/components/BannerCarousel';
+import { SeriesCard } from '@/components/SeriesCard';
 import { colors, spacing, font, radius } from '@/constants/theme';
 import {
   C_CRICKET, C_FOOTBALL, C_LIVE,
@@ -85,6 +87,7 @@ export default function DiscoveryScreen({ onOpenLeagueSheet, onOpenDrawer, onNav
   const { data: homeSections = [] } = useHomeSections();
   const { data: accuracy }          = useAccuracy();
   const { data: leagueCards = [], refetch: refetchLeagueCards } = useLeagueCards(5);
+  const { data: allSeries = [] } = useInternationalSeries();
 
   // Partition by today / upcoming
   const cLive      = cricket.live;
@@ -173,6 +176,9 @@ export default function DiscoveryScreen({ onOpenLeagueSheet, onOpenDrawer, onNav
 
   // Top 3 news items
   const topNews = news.slice(0, 3);
+
+  // Live + upcoming international series, max 3 shown on Discovery
+  const activeSeries = allSeries.filter(s => s.status !== 'completed').slice(0, 3);
 
   // Discretionary section order/visibility, admin-configured; fall back to
   // the bundled default order until home_sections has been seeded/fetched.
@@ -311,6 +317,25 @@ export default function DiscoveryScreen({ onOpenLeagueSheet, onOpenDrawer, onNav
               <SectionHeader emoji="📆" title="Coming Up" onMore={() => router.push('/(tabs)/(matches)')} />
               {cUpcoming.map(m => <CricketMatchCard  key={m.id} match={m} onPress={goToCricket} leagueLabel={m.leagueLabel} />)}
               {fUpcoming.map(m => <FootballMatchCard key={m.id} match={m} onPress={goToFootball} />)}
+            </View>
+          )}
+
+          {/* ── International Series ───────────────── */}
+          {activeSeries.length > 0 && (
+            <View style={{ marginBottom: spacing.xl }}>
+              <SectionHeader
+                emoji="🌍"
+                title="International Series"
+                onMore={() => router.push('/(international)' as any)}
+                moreLabel="View All →"
+              />
+              {activeSeries.map(s => (
+                <SeriesCard
+                  key={s.id}
+                  series={s}
+                  onPress={() => router.push(`/(international)/${s.id}` as any)}
+                />
+              ))}
             </View>
           )}
 
