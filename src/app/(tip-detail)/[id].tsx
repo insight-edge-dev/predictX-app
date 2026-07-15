@@ -2,14 +2,19 @@ import {
   View, Text, Pressable, ScrollView, Image, ActivityIndicator,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { safeBack } from '@/utils/navigation';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useMatchTip } from '@/hooks/useTips';
 import { useFootballMatchTip } from '@/hooks/useFootballTips';
 import { useIsFootball } from '@/contexts/LeagueContext';
+import { useUpvote } from '@/hooks/useUserPrediction';
+import { useAuth } from '@/contexts/AuthContext';
 import { FootballProbabilityBar } from '@/components/FootballProbabilityBar';
 import { TeamCrest } from '@/components/TeamCrest';
+import { CommentSection } from '@/components/comments/CommentSection';
+import { PredictXUpvote } from '@/components/predictions/PredictXUpvote';
 import { getTeamColor, getTeamLogo } from '@/theme/colors';
 import { formatMatchDate } from '@/utils/date';
 import { colors, spacing, font, radius } from '@/constants/theme';
@@ -322,10 +327,12 @@ function FootballTipDetailScreen() {
   const { id }  = useLocalSearchParams<{ id: string }>();
   const router  = useRouter();
   const { data, isLoading, isError, refetch } = useFootballMatchTip(id);
+  const { user, profile, isAuthenticated } = useAuth();
+  const { query: upvoteQuery, toggle: upvoteToggle } = useUpvote(id ?? '', isAuthenticated);
 
   const BackBtn = (
     <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, backgroundColor: colors.bg }}>
-      <Pressable onPress={() => router.back()} style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1, flexDirection: 'row', alignItems: 'center' })} hitSlop={8}>
+      <Pressable onPress={() => safeBack()} style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1, flexDirection: 'row', alignItems: 'center' })} hitSlop={8}>
         <Ionicons name="chevron-back" size={22} color={colors.textPrimary} />
         <Text style={{ color: colors.textPrimary, fontSize: font.md, fontWeight: '600', marginLeft: 2 }}>Predictions</Text>
       </Pressable>
@@ -477,6 +484,21 @@ function FootballTipDetailScreen() {
         </View>
 
       </ScrollView>
+
+      {/* Upvote + comments outside ScrollView so the input stays pinned */}
+      <PredictXUpvote
+        count={upvoteQuery.data?.count ?? 0}
+        upvoted={upvoteQuery.data?.upvoted ?? false}
+        isLoading={upvoteToggle.isPending}
+        onToggle={() => upvoteToggle.mutate()}
+        authenticated={isAuthenticated}
+      />
+      <CommentSection
+        contextType="tip"
+        contextId={id ?? ''}
+        userId={user?.id ?? null}
+        displayName={profile?.displayName ?? user?.displayName ?? null}
+      />
     </SafeAreaView>
   );
 }
@@ -487,10 +509,12 @@ function CricketTipDetailScreen() {
   const { id }  = useLocalSearchParams<{ id: string }>();
   const router  = useRouter();
   const { data, isLoading, isError, refetch } = useMatchTip(id ?? '');
+  const { user, profile, isAuthenticated } = useAuth();
+  const { query: upvoteQuery, toggle: upvoteToggle } = useUpvote(id ?? '', isAuthenticated);
 
   const BackBtn = (
     <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, backgroundColor: colors.bg }}>
-      <Pressable onPress={() => router.back()} style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1, flexDirection: 'row', alignItems: 'center' })} hitSlop={8}>
+      <Pressable onPress={() => safeBack()} style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1, flexDirection: 'row', alignItems: 'center' })} hitSlop={8}>
         <Ionicons name="chevron-back" size={22} color={colors.textPrimary} />
         <Text style={{ color: colors.textPrimary, fontSize: font.md, fontWeight: '600', marginLeft: 2 }}>Predictions</Text>
       </Pressable>
@@ -703,6 +727,20 @@ function CricketTipDetailScreen() {
         </View>
 
       </ScrollView>
+
+      <PredictXUpvote
+        count={upvoteQuery.data?.count ?? 0}
+        upvoted={upvoteQuery.data?.upvoted ?? false}
+        isLoading={upvoteToggle.isPending}
+        onToggle={() => upvoteToggle.mutate()}
+        authenticated={isAuthenticated}
+      />
+      <CommentSection
+        contextType="tip"
+        contextId={id ?? ''}
+        userId={user?.id ?? null}
+        displayName={profile?.displayName ?? user?.displayName ?? null}
+      />
     </SafeAreaView>
   );
 }

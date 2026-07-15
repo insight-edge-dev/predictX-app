@@ -1,12 +1,13 @@
 import {
   View, Text, Modal, Pressable, ScrollView,
-  Animated, Dimensions, Image,
+  Dimensions, Image,
 } from 'react-native';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
+import Animated, { useSharedValue, useAnimatedStyle, withSpring } from 'react-native-reanimated';
+import { springs } from '@/utils/anim';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useLeague, type League } from '@/contexts/LeagueContext';
-import { useLeaguesEndedMap } from '@/hooks/useMatches';
 import { colors, spacing, font, radius } from '@/constants/theme';
 
 const SCREEN_HEIGHT = Dimensions.get('window').height;
@@ -23,7 +24,10 @@ interface Props {
 export function LeagueSheet({ visible, onClose, initialSport, onSelect }: Props) {
   const { league: current, leagues, setLeagueId } = useLeague();
   const router = useRouter();
-  const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
+  const translateY = useSharedValue(SCREEN_HEIGHT);
+  const sheetStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: translateY.value }],
+  }));
 
   // Default active tab to whichever sport the current league belongs to
   const [sportTab, setSportTab] = useState<SportTab>(
@@ -38,12 +42,7 @@ export function LeagueSheet({ visible, onClose, initialSport, onSelect }: Props)
   }, [visible, current.sport, initialSport]);
 
   useEffect(() => {
-    Animated.spring(slideAnim, {
-      toValue:         visible ? 0 : SCREEN_HEIGHT,
-      useNativeDriver: true,
-      bounciness:      4,
-      speed:           20,
-    }).start();
+    translateY.value = withSpring(visible ? 0 : SCREEN_HEIGHT, springs.smooth);
   }, [visible]);
 
   const handleSelect = (l: League) => {
@@ -57,16 +56,10 @@ export function LeagueSheet({ visible, onClose, initialSport, onSelect }: Props)
     router.push('/(international)');
   };
 
-  // Show current-cycle leagues: 2026 or 2025/26 season tags.
-  // BBL and BPL use "2025/26" while other leagues use "2026" — both are current.
-  const isCurrent = (l: League) => l.season === '2026' || l.season === '2025/26';
-
-  const cricketLeagues  = leagues.filter(l => (l.sport === 'cricket' || !l.sport) && isCurrent(l));
-  const footballLeagues = leagues.filter(l => l.sport === 'football' && isCurrent(l));
+  // Backend returns all leagues pre-sorted: active first, then completed.
+  const cricketLeagues  = leagues.filter(l => l.sport === 'cricket' || !l.sport);
+  const footballLeagues = leagues.filter(l => l.sport === 'football');
   const visibleLeagues  = sportTab === 'football' ? footballLeagues : cricketLeagues;
-
-  // Mark leagues whose season has already finished (completed matches, none upcoming/live)
-  const endedMap = useLeaguesEndedMap(cricketLeagues.map(l => l.id));
 
   return (
     <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
@@ -75,14 +68,13 @@ export function LeagueSheet({ visible, onClose, initialSport, onSelect }: Props)
         onPress={onClose}
       />
 
-      <Animated.View style={{
+      <Animated.View style={[{
         position: 'absolute', left: 0, right: 0, bottom: 0,
-        transform: [{ translateY: slideAnim }],
         backgroundColor: colors.card,
         borderTopLeftRadius: 24, borderTopRightRadius: 24,
         borderWidth: 1, borderColor: colors.border,
         maxHeight: SCREEN_HEIGHT * 0.82,
-      }}>
+      }, sheetStyle]}>
         {/* Handle */}
         <View style={{ alignItems: 'center', paddingTop: 12, paddingBottom: 4 }}>
           <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: colors.border }} />
@@ -145,15 +137,35 @@ export function LeagueSheet({ visible, onClose, initialSport, onSelect }: Props)
               {sportTab === 'cricket' && (
                 <InternationalRow onPress={handleSelectInternational} />
               )}
-              {visibleLeagues.map(l => (
-                <LeagueRow
-                  key={String(l.leagueId ?? l.id)}
-                  league={l}
-                  selected={current.id === l.id}
-                  ended={!!endedMap[l.id]}
-                  onPress={() => handleSelect(l)}
-                />
-              ))}
+              {visibleLeagues.map((l, idx) => {
+                // Insert a divider before the first completed league
+                const prevLeague = visibleLeagues[idx - 1];
+                const showDivider =
+                  l.status === 'completed' &&
+                  (!prevLeague || prevLeague.status !== 'completed');
+                return (
+                  <View key={String(l.leagueId ?? l.id)}>
+                    {showDivider && (
+                      <View style={{
+                        flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+                        marginTop: spacing.xs, marginBottom: spacing.xs,
+                      }}>
+                        <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
+                        <Text style={{ color: colors.textMuted, fontSize: 10, fontWeight: '600', letterSpacing: 0.8 }}>
+                          PAST SEASONS
+                        </Text>
+                        <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
+                      </View>
+                    )}
+                    <LeagueRow
+                      league={l}
+                      selected={current.id === l.id}
+                      ended={l.status === 'completed'}
+                      onPress={() => handleSelect(l)}
+                    />
+                  </View>
+                );
+              })}
             </View>
           )}
         </ScrollView>

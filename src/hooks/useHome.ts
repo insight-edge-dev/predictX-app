@@ -1,7 +1,5 @@
-import { useEffect } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import api from '@/services/api';
-import { supabase } from '@/lib/supabase';
 
 export interface ToplistPlayer {
   playerId:  string;
@@ -121,7 +119,7 @@ export function useSeasonStats(enabled = true) {
   });
 }
 
-export function useHomeNews() {
+export function useHomeNews(enabled = true) {
   return useQuery<NewsItem[]>({
     queryKey:             ['home:news'],
     queryFn:              () => api.get<NewsItem[]>('/home/news'),
@@ -129,6 +127,7 @@ export function useHomeNews() {
     refetchOnMount:       false,
     refetchOnWindowFocus: false,
     retry:                1,
+    enabled,
     placeholderData:      (prev) => prev ?? [],
   });
 }
@@ -206,14 +205,16 @@ export interface LeagueCard {
   recentMatches: RecentPrediction[];
 }
 
-export function useLeagueCards(limit = 5) {
+export function useLeagueCards(limit = 5, enabled = true) {
   return useQuery<LeagueCard[]>({
     queryKey:             ['home:league-cards', limit],
     queryFn:              () => api.get<{ cards: LeagueCard[] }>(`/home/league-cards?limit=${limit}`).then(d => d.cards),
     staleTime:            5 * 60_000,
+    refetchInterval:      5 * 60_000,
     refetchOnMount:       false,
     refetchOnWindowFocus: false,
     retry:                1,
+    enabled,
     placeholderData:      (prev) => prev ?? [],
   });
 }
@@ -226,31 +227,12 @@ export interface Accuracy {
 }
 
 export function useAccuracy(scope?: string) {
-  const queryClient = useQueryClient();
-
-  // Admin overrides should reach the app instantly, not on the next 60s poll —
-  // mirrors the expert-predictions Realtime pattern (see matches screen).
-  useEffect(() => {
-    const channel = supabase
-      .channel(`accuracy_overrides_${Math.random().toString(36).slice(2)}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'accuracy_overrides' }, () => {
-        queryClient.invalidateQueries({ queryKey: ['home:accuracy'] });
-      })
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [queryClient]);
-
   return useQuery<Accuracy>({
     queryKey:             ['home:accuracy', scope ?? 'global'],
     queryFn:              () => api.get<Accuracy>(scope ? `/home/accuracy/${scope}` : '/home/accuracy'),
-    // Short staleTime (unlike facts/sections) — an admin override should be
-    // visible again within moments of saving it, not up to 30 minutes later.
     staleTime:            60_000,
     refetchOnMount:       true,
     refetchOnWindowFocus: false,
-    // Polling fallback in case the Realtime subscription above ever misses
-    // an event (dropped connection, etc.) — caps staleness at 1 minute
-    // regardless of whether Realtime actually fired.
     refetchInterval:      60_000,
     retry:                1,
     placeholderData:      (prev) => prev,

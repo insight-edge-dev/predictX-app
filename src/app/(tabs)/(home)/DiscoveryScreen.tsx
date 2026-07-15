@@ -1,3 +1,4 @@
+import { useMemo, useState } from 'react';
 import {
   View, Text, ScrollView, Pressable, RefreshControl, Image,
 } from 'react-native';
@@ -7,18 +8,24 @@ import { useRouter } from 'expo-router';
 import { useLeague } from '@/contexts/LeagueContext';
 import { useNotificationBadge } from '@/contexts/NotificationBadgeContext';
 import { useHomeFeed } from '@/hooks/useHomeFeed';
+import { useHomeBundle } from '@/hooks/useHomeBundle';
 import { useWCHistoryStats } from '@/hooks/useWCHistoryStats';
 import { useFootballTips } from '@/hooks/useFootballTips';
 import { useWC2026Groups } from '@/hooks/useWC2026Groups';
 import { useHomeNews, useHomeRankings, useHomeFacts, useHomeSections, useAccuracy, useLeagueCards } from '@/hooks/useHome';
-import { useInternationalSeries } from '@/hooks/useInternational';
+import { useInternationalSeries, useInternationalSchedule } from '@/hooks/useInternational';
 import type { RecentPrediction } from '@/hooks/useHome';
+import { useLeaderboard } from '@/hooks/useUserPrediction';
+import type { LeaderboardEntry } from '@/hooks/useUserPrediction';
+import { PageLoader } from '@/components/PageLoader';
+import { Bone } from '@/components/Skeleton';
 import { useTipsList } from '@/hooks/useTips';
 import { useLeagueTable } from '@/hooks/useMatches';
 import type { SportTab } from '@/components/LeagueSheet';
 import { GroupTable } from '@/components/GroupTable';
 import { BannerCarousel } from '@/components/BannerCarousel';
 import { SeriesCard } from '@/components/SeriesCard';
+import { QuickPredictSection } from '@/components/home/QuickPredictSection';
 import { colors, spacing, font, radius } from '@/constants/theme';
 import {
   C_CRICKET, C_FOOTBALL, C_LIVE,
@@ -28,6 +35,7 @@ import {
   MiniStandingsTable, WCCountdownBanner,
   WC_FACTS, CRICKET_FACTS, fbFlag, WCStatCard, FactCard, RankingTeamCard, RankingPlayerCard,
   AccuracyBadge, LeagueTrackRecordCard,
+  MatchGroupHeader, CompactCricketRow, CompactFootballRow,
   type StatCard,
 } from '@/components/home/HomeShared';
 
@@ -62,47 +70,200 @@ function LeagueCard({ emoji, title, subtitle, color, onPress }: {
   );
 }
 
+// ── Top Predictors Card ───────────────────────────────────────
+
+const RANK_MEDALS = ['🥇', '🥈', '🥉'];
+
+function LeaderboardRow({ entry }: { entry: LeaderboardEntry }) {
+  const medal    = entry.rank <= 3 ? RANK_MEDALS[entry.rank - 1] : null;
+  const maxScore = 20;
+  const barPct   = Math.min(((entry.score ?? 0) / maxScore) * 100, 100);
+
+  return (
+    <View style={{
+      flexDirection: 'row', alignItems: 'center',
+      paddingVertical: 9,
+      borderBottomWidth: 1, borderBottomColor: colors.border,
+    }}>
+      <View style={{ width: 30, alignItems: 'center' }}>
+        {medal
+          ? <Text style={{ fontSize: 16 }}>{medal}</Text>
+          : <Text style={{ fontSize: font.sm, fontWeight: '700', color: colors.textMuted }}>#{entry.rank}</Text>
+        }
+      </View>
+
+      <View style={{ flex: 1, marginLeft: spacing.xs }}>
+        <Text style={{ fontSize: font.sm, fontWeight: '700', color: colors.textPrimary }} numberOfLines={1}>
+          {entry.display_name}
+        </Text>
+        <View style={{
+          height: 4, borderRadius: 2, backgroundColor: colors.cardElevated,
+          marginTop: 4, overflow: 'hidden',
+        }}>
+          <View style={{
+            height: 4, borderRadius: 2, backgroundColor: colors.accent,
+            width: `${barPct}%`,
+          }} />
+        </View>
+      </View>
+
+      <View style={{ alignItems: 'flex-end', marginLeft: spacing.sm }}>
+        <Text style={{ fontSize: font.sm, fontWeight: '800', color: colors.textPrimary, fontVariant: ['tabular-nums'] }}>
+          {(entry.score ?? 0).toFixed(1)}
+        </Text>
+        <Text style={{ fontSize: 9, color: colors.textMuted, fontWeight: '700', marginTop: 1 }}>
+          score
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+function TopPredictorsSection() {
+  const { data: entries = [], isLoading } = useLeaderboard(5, 'week');
+
+  if (isLoading) return (
+    <View style={{
+      backgroundColor: colors.card, borderRadius: radius.xl,
+      borderWidth: 1, borderColor: colors.border,
+      padding: spacing.lg, marginBottom: spacing.xl,
+    }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: spacing.md }}>
+        <Ionicons name="trophy" size={16} color="#F59E0B" style={{ marginRight: 6 }} />
+        <Text style={{ color: colors.textPrimary, fontSize: font.md, fontWeight: '800' }}>Top Predictors This Week</Text>
+      </View>
+      {[1, 2, 3].map(i => (
+        <View key={i} style={{
+          height: 36, borderRadius: radius.md,
+          backgroundColor: colors.cardElevated,
+          marginBottom: spacing.sm,
+        }} />
+      ))}
+    </View>
+  );
+
+  return (
+    <View style={{
+      backgroundColor: colors.card, borderRadius: radius.xl,
+      borderWidth: 1, borderColor: colors.border,
+      paddingHorizontal: spacing.lg, paddingTop: spacing.lg, paddingBottom: spacing.sm,
+      marginBottom: spacing.xl,
+    }}>
+      {/* Header */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.xs }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <Ionicons name="trophy" size={16} color="#F59E0B" />
+          <Text style={{ color: colors.textPrimary, fontSize: font.md, fontWeight: '800' }}>Top Predictors This Week</Text>
+        </View>
+        <View style={{
+          backgroundColor: colors.accentDim, paddingHorizontal: 8,
+          paddingVertical: 3, borderRadius: 20,
+        }}>
+          <Text style={{ color: colors.accent, fontSize: 10, fontWeight: '700' }}>LIVE</Text>
+        </View>
+      </View>
+
+      {/* Column labels */}
+      <View style={{ flexDirection: 'row', paddingVertical: 4, marginBottom: 2 }}>
+        <View style={{ width: 30 }} />
+        <Text style={{ flex: 1, marginLeft: spacing.xs, fontSize: 10, color: colors.textMuted, fontWeight: '600', letterSpacing: 0.3 }}>PREDICTOR</Text>
+        <Text style={{ fontSize: 10, color: colors.textMuted, fontWeight: '600', letterSpacing: 0.3 }}>CORRECT · ACC</Text>
+      </View>
+
+      {entries.length === 0 ? (
+        <View style={{ paddingVertical: spacing.xl, alignItems: 'center', gap: spacing.xs }}>
+          <Ionicons name="podium-outline" size={28} color={colors.border} />
+          <Text style={{ fontSize: font.sm, fontWeight: '600', color: colors.textSecondary, marginTop: spacing.xs }}>
+            No predictions resolved yet
+          </Text>
+          <Text style={{ fontSize: font.xs, color: colors.textMuted }}>
+            Predict match outcomes to appear here
+          </Text>
+        </View>
+      ) : (
+        entries.map(e => <LeaderboardRow key={e.user_id} entry={e} />)
+      )}
+
+      {entries.length > 0 && (
+        <Text style={{ fontSize: 10, color: colors.textMuted, textAlign: 'center', paddingTop: spacing.sm }}>
+          Ranked by correct predictions in the last 7 days
+        </Text>
+      )}
+    </View>
+  );
+}
+
 // ── Main Screen ───────────────────────────────────────────────
 
 interface Props {
   onOpenLeagueSheet: (sport?: SportTab) => void;
   onOpenDrawer:      () => void;
-  onNavigateLeagueHome: (slug: string) => void;
 }
 
-export default function DiscoveryScreen({ onOpenLeagueSheet, onOpenDrawer, onNavigateLeagueHome }: Props) {
+export default function DiscoveryScreen({ onOpenLeagueSheet, onOpenDrawer }: Props) {
   const router          = useRouter();
   const { league, setLeagueId } = useLeague();
   const { unreadCount } = useNotificationBadge();
 
-  const { cricket, football, isLoading, isRefetching, refetch } = useHomeFeed();
+  // Bundle fires ONE request for all expensive data — eliminates 15+ parallel
+  // HTTP/1.1 calls that queued behind the 6-connection limit on mobile.
+  const bundle = useHomeBundle();
+  const bundleResolved = bundle.isSuccess || bundle.isError;
+
+  // Individual hooks are disabled until bundle resolves.
+  // When bundle sets their cache keys, they read from cache without fetching.
+  const { cricket, football, isLoading, isRefetching, refetch } = useHomeFeed({ enabled: bundleResolved });
   const { data: wcStats }    = useWCHistoryStats();
   const { data: tips = [] }  = useFootballTips();
   const { data: groups }     = useWC2026Groups();
-  const { data: news = [] }  = useHomeNews();
+  const { data: news = [] }  = useHomeNews(bundleResolved);
   const { data: cricketTips = [] } = useTipsList();
   const { data: apiFacts = [] }    = useHomeFacts(league.sport);
   const { data: standings = [] }   = useLeagueTable();
   const { data: rankings }         = useHomeRankings();
   const { data: homeSections = [] } = useHomeSections();
   const { data: accuracy }          = useAccuracy();
-  const { data: leagueCards = [], refetch: refetchLeagueCards } = useLeagueCards(5);
-  const { data: allSeries = [] } = useInternationalSeries();
+  const { data: leagueCards = [], isFetching: leagueCardsFetching, refetch: refetchLeagueCards } = useLeagueCards(5, bundleResolved);
+  const { data: allSeries = [] } = useInternationalSeries({ enabled: bundleResolved });
+  const { data: intlSchedule }   = useInternationalSchedule({ enabled: bundleResolved });
 
   // Partition by today / upcoming
   const cLive      = cricket.live;
   const fLive      = football.live;
   const cToday     = cricket.upcoming.filter(m => isToday(m.date));
   const fToday     = football.upcoming.filter(m => isToday(m.date));
-  const cUpcoming  = cricket.upcoming.filter(m => !isToday(m.date)).slice(0, 3);
-  const fUpcoming  = football.upcoming.filter(m => !isToday(m.date)).slice(0, 4);
-  const totalLive  = cLive.length + fLive.length;
+  const intlLive     = intlSchedule?.live     ?? [];
+  const intlToday    = intlSchedule?.today    ?? [];
+  const intlUpcoming = (intlSchedule?.upcoming ?? []).slice(0, 3);
+  const cUpcoming  = cricket.upcoming.filter(m => !isToday(m.date)).slice(0, 6);
+  const fUpcoming  = football.upcoming.filter(m => !isToday(m.date)).slice(0, 5);
+
+  // Group cricket by league for the Coming Up section
+  const cUpcomingByLeague = useMemo(() => {
+    const groups: Record<string, typeof cUpcoming> = {};
+    cUpcoming.forEach(m => {
+      const key = m.leagueLabel || 'Cricket';
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(m);
+    });
+    return Object.entries(groups); // [['T20 Blast W', [...]], ...]
+  }, [cUpcoming]);
+  const totalLive  = cLive.length + fLive.length + intlLive.length;
   // Live matches already render in the "Live Now" section above — don't count
   // them here too, or this section shows an empty header with no fallback
   // message when the only thing happening today is already-live.
-  const hasToday   = cToday.length + fToday.length > 0;
-  const hasUpcoming = cUpcoming.length + fUpcoming.length > 0;
-  const wcNotStarted = fLive.length === 0 && football.upcoming.length === 0;
+  const hasToday   = cToday.length + fToday.length + intlToday.length > 0;
+  const hasUpcoming = cUpcoming.length + fUpcoming.length + intlUpcoming.length > 0;
+  const wcPreTournament = Date.now() < new Date('2026-06-11T00:00:00Z').getTime();
+  const wcNotStarted = wcPreTournament && fLive.length === 0 && football.upcoming.length === 0;
+
+  const [showAllLeagueCards, setShowAllLeagueCards] = useState(false);
+  const LEAGUE_CARD_LIMIT = 6;
+  // Backend returns cards in admin-controlled display_order — no client-side sort needed.
+  const sortedLeagueCards = useMemo(
+    () => leagueCards.filter(card => (card.accuracy?.sampleSize ?? 0) > 0 || card.accuracy?.isOverridden),
+    [leagueCards],
+  );
 
   // WC Stat Cards derived from historical data
   const statCards: StatCard[] = wcStats ? [
@@ -186,30 +347,42 @@ export default function DiscoveryScreen({ onOpenLeagueSheet, onOpenDrawer, onNav
     ? homeSections.filter(s => s.enabled).sort((a, b) => a.display_order - b.display_order).map(s => s.key)
     : DEFAULT_SECTION_ORDER;
 
+  // Show full-screen Lottie loader only on cold first paint — when no cached
+  // content is available yet. Once any match data is in React Query cache this
+  // stays false, so pull-to-refresh never triggers the overlay.
+  const noContent = cLive.length === 0 && cToday.length === 0 && cUpcoming.length === 0
+                 && fLive.length === 0 && intlLive.length === 0 && intlToday.length === 0;
+  // Show loader while bundle is pending AND we have no cached content to show
+  const showPageLoader = bundle.isLoading && noContent;
+
+  const showLeagueCardsSkeleton = leagueCardsFetching && leagueCards.length === 0;
+
   function goToCricket()  { setLeagueId('ipl');    router.push('/(tabs)/(matches)'); }
   function goToFootball() { setLeagueId('wc2026'); router.push('/(tabs)/(matches)'); }
+  function goToIntlSeries(stageId: string) { router.push(`/(international)/${stageId}` as any); }
   function goToTips()     { router.push('/(tabs)/(tips)'); }
   function goToMatches()  { setLeagueId(league.id); router.push('/(tabs)/(matches)'); }
   function goToTip(id: string) { router.push(`/(tip-detail)/${id}` as any); }
   function goToRecentPrediction(p: RecentPrediction) {
-    // Match-details has no sport param of its own — it renders cricket vs
-    // football based on the currently-selected league's sport, so that has
-    // to be set correctly before navigating (same as goToCricket/goToFootball).
-    if (p.sport === 'football') setLeagueId('wc2026');
-    else if (league.sport !== 'cricket') setLeagueId('ipl');
-    router.push(`/(match-details)/${p.id}` as any);
+    if (p.sport === 'football') {
+      router.push(`/(match-details)/${p.id}?sport=football` as any);
+    } else {
+      if (league.sport !== 'cricket') setLeagueId('ipl');
+      router.push(`/(match-details)/${p.id}` as any);
+    }
   }
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
+      <PageLoader show={showPageLoader} />
       <SafeAreaView style={{ flex: 1 }}>
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingHorizontal: spacing.lg, paddingBottom: 110 }}
           refreshControl={
             <RefreshControl
-              refreshing={isRefetching}
-              onRefresh={() => { refetch(); refetchLeagueCards(); }}
+              refreshing={isRefetching || bundle.isFetching}
+              onRefresh={() => { bundle.refetch(); refetch(); refetchLeagueCards(); }}
               tintColor={C_CRICKET}
               colors={[C_CRICKET, C_FOOTBALL]}
             />
@@ -252,8 +425,8 @@ export default function DiscoveryScreen({ onOpenLeagueSheet, onOpenDrawer, onNav
 
           {/* ── Sport pills ────────────────────────── */}
           <View style={{ flexDirection: 'row', gap: spacing.sm, alignItems: 'center', marginBottom: spacing.xl }}>
-            <SportPill emoji="🏏" label="Cricket"  color={C_CRICKET}  textColor="#101400" active={league.sport === 'cricket'}  onPress={() => onOpenLeagueSheet('cricket')}  />
-            <SportPill emoji="⚽" label="Football" color={C_FOOTBALL} textColor="#FFFFFF" active={league.sport === 'football'} onPress={() => onOpenLeagueSheet('football')} />
+            <SportPill emoji="🏏" label="Cricket"  color={C_CRICKET}  textColor="#101400" active={false} onPress={() => onOpenLeagueSheet('cricket')}  />
+            <SportPill emoji="⚽" label="Football" color={C_FOOTBALL} textColor="#FFFFFF" active={false} onPress={() => onOpenLeagueSheet('football')} />
             <View style={{ flex: 1 }} />
             <Pressable
               onPress={() => onOpenLeagueSheet()}
@@ -270,10 +443,31 @@ export default function DiscoveryScreen({ onOpenLeagueSheet, onOpenDrawer, onNav
           </View>
 
           {/* ── Banners ────────────────────────────── */}
-          <BannerCarousel placement="discovery" onNavigateLeagueHome={onNavigateLeagueHome} />
+          <BannerCarousel placement="discovery" />
 
           {/* ── PredictX Prediction (per-league track record) ────── */}
-          {leagueCards.length > 0 && (
+          {showLeagueCardsSkeleton ? (
+            <View style={{
+              marginBottom: spacing.xl, backgroundColor: colors.card, borderRadius: radius.xl,
+              borderWidth: 1, borderColor: colors.border, padding: spacing.lg,
+            }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: spacing.lg, gap: 8 }}>
+                <Bone w={18} h={18} br={9} />
+                <Bone w={160} h={16} br={6} />
+              </View>
+              {[0, 1, 2].map(i => (
+                <View key={i} style={{ marginBottom: spacing.md }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                    <Bone w={28} h={28} br={14} />
+                    <Bone w={100} h={13} br={5} />
+                    <View style={{ flex: 1 }} />
+                    <Bone w={50} h={13} br={5} />
+                  </View>
+                  <Bone w="100%" h={2} br={1} />
+                </View>
+              ))}
+            </View>
+          ) : leagueCards.length > 0 && (
             <View style={{
               marginBottom: spacing.xl, backgroundColor: colors.bg, borderRadius: radius.lg,
               borderWidth: 1, borderColor: colors.border, padding: spacing.md,
@@ -282,9 +476,36 @@ export default function DiscoveryScreen({ onOpenLeagueSheet, onOpenDrawer, onNav
                 <Ionicons name="trending-up" size={18} color={colors.accent} style={{ marginRight: 6 }} />
                 <Text style={{ color: colors.textPrimary, fontSize: font.md, fontWeight: '800' }}>PredictX Prediction</Text>
               </View>
-              {leagueCards.map((card, i) => (
-                <LeagueTrackRecordCard key={card.slug} card={card} index={i} defaultExpanded={i === 0} onPressMatch={goToRecentPrediction} />
-              ))}
+              {sortedLeagueCards
+                .slice(0, showAllLeagueCards ? sortedLeagueCards.length : LEAGUE_CARD_LIMIT)
+                .map((card, i) => (
+                  <LeagueTrackRecordCard key={card.slug} card={card} index={i} defaultExpanded={i === 0} onPressMatch={goToRecentPrediction} />
+                ))}
+              {sortedLeagueCards.length > LEAGUE_CARD_LIMIT && (
+                <Pressable
+                  onPress={() => setShowAllLeagueCards(prev => !prev)}
+                  style={({ pressed }) => ({
+                    opacity: pressed ? 0.7 : 1,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 6,
+                    paddingVertical: spacing.md,
+                    marginTop: spacing.xs,
+                    backgroundColor: colors.cardElevated,
+                    borderRadius: radius.lg,
+                  })}
+                >
+                  <Text style={{ color: colors.accent, fontSize: font.sm, fontWeight: '700' }}>
+                    {showAllLeagueCards ? 'Show less' : `See ${sortedLeagueCards.length - LEAGUE_CARD_LIMIT} more`}
+                  </Text>
+                  <Ionicons
+                    name={showAllLeagueCards ? 'chevron-up' : 'chevron-down'}
+                    size={14}
+                    color={colors.accent}
+                  />
+                </Pressable>
+              )}
               <Text style={{ color: colors.textMuted, fontSize: 10, textAlign: 'center', marginTop: spacing.xs }}>
                 Powered by PredictX AI
               </Text>
@@ -295,28 +516,88 @@ export default function DiscoveryScreen({ onOpenLeagueSheet, onOpenDrawer, onNav
           {totalLive > 0 && (
             <View style={{ marginBottom: spacing.xl }}>
               <LiveSectionHeader count={totalLive} />
-              {cLive.map(m => <CricketMatchCard  key={m.id} match={m} onPress={goToCricket} leagueLabel={m.leagueLabel} />)}
-              {fLive.map(m => <FootballMatchCard key={m.id} match={m} onPress={goToFootball} />)}
+              {cLive.map(m => <CricketMatchCard  key={m.id} match={m} onPress={() => router.push(`/(match-details)/${m.id}` as any)} leagueLabel={m.leagueLabel} />)}
+              {fLive.map(m => <FootballMatchCard key={m.id} match={m} onPress={() => router.push(`/(match-details)/${m.id}?sport=football` as any)} />)}
+              {intlLive.map(m => (
+                <CricketMatchCard
+                  key={m.id}
+                  match={m}
+                  onPress={() => goToIntlSeries(m.stageId)}
+                  leagueLabel={m.leagueLabel}
+                />
+              ))}
             </View>
           )}
 
           {/* ── Today ──────────────────────────────── */}
           <View style={{ marginBottom: spacing.xl }}>
-            <SectionHeader emoji="📅" title="Today" />
-            {cToday.map(m => <CricketMatchCard  key={m.id} match={m} onPress={goToCricket} leagueLabel={m.leagueLabel} />)}
-            {fToday.map(m => <FootballMatchCard key={m.id} match={m} onPress={goToFootball} />)}
+            <SectionHeader title="Today" />
             {wcNotStarted && <WCCountdownBanner onPress={goToFootball} />}
             {!hasToday && !wcNotStarted && !isLoading && (
               <EmptyCard message="No matches scheduled today — check Coming Up for what's next" />
             )}
+            {cToday.map(m => <CricketMatchCard key={m.id} match={m} onPress={() => router.push(`/(match-details)/${m.id}` as any)} leagueLabel={m.leagueLabel} />)}
+            {fToday.map(m => <FootballMatchCard key={m.id} match={m} onPress={() => router.push(`/(match-details)/${m.id}?sport=football` as any)} />)}
+            {intlToday.map(m => (
+              <CricketMatchCard
+                key={m.id} match={m}
+                onPress={() => goToIntlSeries(m.stageId)}
+                leagueLabel={m.leagueLabel}
+              />
+            ))}
           </View>
+
+          {/* ── Predict Now ────────────────────────── */}
+          <QuickPredictSection
+            cricket={cricket.upcoming}
+            football={football.upcoming}
+            international={intlSchedule?.upcoming ?? []}
+            onPressMatch={(id, sport, stageId) => {
+              if (sport === 'football') {
+                router.push(`/(match-details)/${id}?sport=football` as any);
+              } else if (sport === 'international' && stageId) {
+                router.push(`/(international)/${stageId}` as any);
+              } else {
+                router.push(`/(match-details)/${id}` as any);
+              }
+            }}
+            onSeeAll={() => router.push('/(predict)' as any)}
+          />
 
           {/* ── Coming Up ──────────────────────────── */}
           {hasUpcoming && (
             <View style={{ marginBottom: spacing.xl }}>
-              <SectionHeader emoji="📆" title="Coming Up" onMore={() => router.push('/(tabs)/(matches)')} />
-              {cUpcoming.map(m => <CricketMatchCard  key={m.id} match={m} onPress={goToCricket} leagueLabel={m.leagueLabel} />)}
-              {fUpcoming.map(m => <FootballMatchCard key={m.id} match={m} onPress={goToFootball} />)}
+              <SectionHeader title="Coming Up" onMore={() => router.push('/(tabs)/(matches)')} moreLabel="See all →" />
+
+              {/* Cricket — grouped by league */}
+              {cUpcomingByLeague.map(([label, matches], groupIdx) => (
+                <View key={label} style={{ marginBottom: groupIdx < cUpcomingByLeague.length - 1 || fUpcoming.length > 0 || intlUpcoming.length > 0 ? spacing.md : 0 }}>
+                  <MatchGroupHeader label={label} sport="cricket" />
+                  {matches.map(m => (
+                    <CompactCricketRow key={m.id} match={m} onPress={() => router.push(`/(match-details)/${m.id}` as any)} />
+                  ))}
+                </View>
+              ))}
+
+              {/* Football */}
+              {fUpcoming.length > 0 && (
+                <View style={{ marginBottom: intlUpcoming.length > 0 ? spacing.md : 0 }}>
+                  <MatchGroupHeader label="FIFA World Cup 2026" sport="football" />
+                  {fUpcoming.map(m => (
+                    <CompactFootballRow key={m.id} match={m} onPress={() => router.push(`/(match-details)/${m.id}?sport=football` as any)} />
+                  ))}
+                </View>
+              )}
+
+              {/* International bilateral */}
+              {intlUpcoming.length > 0 && (
+                <View>
+                  <MatchGroupHeader label="International" sport="international" />
+                  {intlUpcoming.map(m => (
+                    <CompactCricketRow key={m.id} match={m} onPress={() => goToIntlSeries(m.stageId)} />
+                  ))}
+                </View>
+              )}
             </View>
           )}
 
@@ -339,37 +620,15 @@ export default function DiscoveryScreen({ onOpenLeagueSheet, onOpenDrawer, onNav
             </View>
           )}
 
-          {/* ── PredictX Picks ───────────────────────── */}
-          {league.sport === 'cricket' ? (
-            upcomingCricketTips.length > 0 && (
-              <View style={{ marginBottom: spacing.xl }}>
-                <SectionHeader emoji="🤖" title="PredictX Picks" onMore={goToTips} moreLabel="All picks →" />
-                {upcomingCricketTips.map(t => (
-                  <CricketPickCard key={t.id} match={t} onPress={() => goToTip(t.id)} />
-                ))}
-              </View>
-            )
-          ) : (
-            upcomingTips.length > 0 && (
-              <View style={{ marginBottom: spacing.xl }}>
-                <SectionHeader emoji="🤖" title="PredictX Picks" onMore={goToTips} moreLabel="All picks →" />
-                {upcomingTips.map(t => (
-                  <AIPickCard key={t.id} tip={t} onPress={goToFootball} />
-                ))}
-              </View>
-            )
-          )}
+
+          {/* ── Top Predictors This Week ───────────── */}
+          <TopPredictorsSection />
 
           {/* ── Discretionary sections, order/visibility from admin ── */}
           {sectionOrder.map(key => {
             switch (key) {
               case 'points_table':
-                return league.sport === 'cricket' && standings.length > 0 && (
-                  <View key={key} style={{ marginBottom: spacing.xl }}>
-                    <SectionHeader emoji="🏆" title="Points Table" onMore={goToMatches} moreLabel="Full table →" />
-                    <MiniStandingsTable rows={standings} limit={4} />
-                  </View>
-                );
+                return null;
 
               case 'icc_rankings':
                 return league.sport === 'cricket' && rankingTeams.length > 0 && (
@@ -452,15 +711,7 @@ export default function DiscoveryScreen({ onOpenLeagueSheet, onOpenDrawer, onNav
                 );
 
               case 'leagues_explore':
-                return (
-                  <View key={key} style={{ marginBottom: spacing.xl }}>
-                    <SectionHeader emoji="🏟" title="Leagues" onMore={() => onOpenLeagueSheet()} />
-                    <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-                      <LeagueCard emoji="🏏" title="Cricket"  subtitle="IPL · PSL · T20 WC · BBL" color={C_CRICKET}  onPress={goToCricket}  />
-                      <LeagueCard emoji="⚽" title="Football" subtitle="FIFA World Cup 2026"        color={C_FOOTBALL} onPress={goToFootball} />
-                    </View>
-                  </View>
-                );
+                return null;
 
               default:
                 return null;

@@ -13,40 +13,44 @@ import {
   View,
   Text,
   Pressable,
-  Animated,
 } from 'react-native';
 import { Image } from 'expo-image';
-import { memo, useRef, useEffect } from 'react';
+import { memo, useEffect } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import * as Haptics from 'expo-haptics';
+import Animated, {
+  useSharedValue, useAnimatedStyle,
+  withRepeat, withSequence, withTiming,
+} from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
 import type { AdaptedMatch } from '@/utils/matchAdapter';
 import { getTeamLogo, getTeamColor } from '@/theme/colors';
 import { formatMatchDate, getMatchCountdown } from '@/utils/date';
 import { colors, spacing, font, radius } from '@/constants/theme';
 import { useLeague } from '@/contexts/LeagueContext';
+import { usePress } from '@/hooks/usePress';
 
 // ── Pulsing live dot ──────────────────────────────────────────
 
 function LiveDot({ size = 6 }: { size?: number }) {
-  const opacity = useRef(new Animated.Value(1)).current;
+  const opacity  = useSharedValue(1);
+  const dotStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
 
   useEffect(() => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(opacity, { toValue: 0.25, duration: 600, useNativeDriver: true }),
-        Animated.timing(opacity, { toValue: 1,    duration: 600, useNativeDriver: true }),
-      ])
-    ).start();
+    opacity.value = withRepeat(
+      withSequence(
+        withTiming(0.25, { duration: 600 }),
+        withTiming(1,    { duration: 600 }),
+      ),
+      -1, false
+    );
   }, []);
 
   return (
     <Animated.View
-      style={{
+      style={[{
         width: size, height: size, borderRadius: size / 2,
         backgroundColor: colors.live,
-        opacity,
-      }}
+      }, dotStyle]}
     />
   );
 }
@@ -157,26 +161,6 @@ export function PredictionBadge({ label, result }: { label: string; result: 'cor
   );
 }
 
-// ── Press animation hook ───────────────────────────────────────
-
-function usePressScale() {
-  const scale = useRef(new Animated.Value(1)).current;
-
-  const onPressIn = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    Animated.spring(scale, {
-      toValue: 0.984, useNativeDriver: true, speed: 50, bounciness: 3,
-    }).start();
-  };
-
-  const onPressOut = () => {
-    Animated.spring(scale, {
-      toValue: 1, useNativeDriver: true, speed: 50, bounciness: 3,
-    }).start();
-  };
-
-  return { scale, onPressIn, onPressOut };
-}
 
 // ── MatchCard (primary compact card) ─────────────────────────
 
@@ -191,7 +175,7 @@ export const MatchCard = memo(function MatchCard({
   predictionResult?:       'correct' | 'wrong' | null;
   expertPredictionResult?: 'correct' | 'wrong' | null;
 }) {
-  const { scale, onPressIn, onPressOut } = usePressScale();
+  const press = usePress(0.984);
   const router = useRouter();
   const { league } = useLeague();
 
@@ -215,19 +199,18 @@ export const MatchCard = memo(function MatchCard({
   return (
     <Pressable
       onPress={() => onPress?.(match.id)}
-      onPressIn={onPressIn}
-      onPressOut={onPressOut}
+      onPressIn={press.onPressIn}
+      onPressOut={press.onPressOut}
     >
       <Animated.View
-        style={{
-          transform:    [{ scale }],
+        style={[{
           marginBottom: spacing.sm,
           shadowColor:  '#000',
           shadowOffset: { width: 0, height: 1 },
           shadowOpacity: 0.05,
           shadowRadius:  3,
           elevation:    1,
-        }}
+        }, press.style]}
       >
         <View
           style={{
@@ -378,7 +361,7 @@ export const FeaturedMatchCard = memo(function FeaturedMatchCard({
   match:    AdaptedMatch;
   onPress?: (id: string) => void;
 }) {
-  const { scale, onPressIn, onPressOut } = usePressScale();
+  const press = usePress(0.984);
   const team1Color = getTeamColor(match.team1Short);
   const team2Color = getTeamColor(match.team2Short);
   const countdown  = match.isUpcoming ? getMatchCountdown(match.date) : '';
@@ -397,19 +380,18 @@ export const FeaturedMatchCard = memo(function FeaturedMatchCard({
   return (
     <Pressable
       onPress={() => onPress?.(match.id)}
-      onPressIn={onPressIn}
-      onPressOut={onPressOut}
+      onPressIn={press.onPressIn}
+      onPressOut={press.onPressOut}
     >
       <Animated.View
-        style={{
-          transform:     [{ scale }],
+        style={[{
           marginBottom:  spacing.lg,
           shadowColor:   '#000',
           shadowOffset:  { width: 0, height: 2 },
           shadowOpacity: 0.08,
           shadowRadius:  8,
           elevation:     3,
-        }}
+        }, press.style]}
       >
         <View
           style={{

@@ -1,16 +1,18 @@
 import {
-  View, Text, Pressable, Image, ActivityIndicator, ScrollView,
+  View, Text, Pressable, Image, ActivityIndicator, ScrollView, RefreshControl,
 } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useTipsList } from '@/hooks/useTips';
 import { useMatchCategories } from '@/hooks/useMatches';
 import { useFootballTips } from '@/hooks/useFootballTips';
 import { useAllTips, type AllTipItem } from '@/hooks/useAllTips';
+import { useTipsBundle } from '@/hooks/useTipsBundle';
 import { getTeamColor, getTeamLogo } from '@/theme/colors';
 import { getTeamColor as getWCColor, getTeamFlag } from '@/constants/wc2026Teams';
 import { formatMatchDate } from '@/utils/date';
@@ -19,6 +21,7 @@ import { useLeague, useIsFootball, type League } from '@/contexts/LeagueContext'
 import { LeagueLogo, C_CRICKET_TAG, AccuracyBadge } from '@/components/home/HomeShared';
 import { useAccuracy } from '@/hooks/useHome';
 import { PredictionCardSkeleton } from '@/components/Skeleton';
+import { PageLoader } from '@/components/PageLoader';
 import { FootballProbabilityBar } from '@/components/FootballProbabilityBar';
 import { TeamCrest } from '@/components/TeamCrest';
 import { LeagueSwitcher } from '@/components/LeagueSwitcher';
@@ -480,11 +483,11 @@ function FootballTipsScreen() {
 
   return (
       <View style={{ flex: 1, backgroundColor: colors.bg }}>
+        <PageLoader show={showFbSkeleton} />
         <SafeAreaView style={{ flex: 1 }}>
           <FlashList
             data={footballMatches}
             keyExtractor={(m) => String(m.id)}
-            estimatedItemSize={180}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={{ paddingHorizontal: spacing.lg, paddingBottom: 100 }}
             ListHeaderComponent={
@@ -578,11 +581,11 @@ function CricketTipsScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
+      <PageLoader show={showSkeleton} />
       <SafeAreaView style={{ flex: 1 }}>
         <FlashList
           data={matches}
           keyExtractor={(m) => String(m.id)}
-          estimatedItemSize={180}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingHorizontal: spacing.lg, paddingBottom: 100 }}
           ListHeaderComponent={<Header count={showSkeleton ? 0 : matches.length} />}
@@ -949,6 +952,29 @@ function BackToAllPill({ onPress, label }: { onPress: () => void; label: string 
   );
 }
 
+// ── Skeleton accordion card — matches the real TipLeagueAccordion shape ──
+
+function TipLeagueAccordionSkeleton() {
+  return (
+    <View style={{
+      marginBottom: spacing.md, backgroundColor: colors.card, borderRadius: radius.lg,
+      borderWidth: 1, borderColor: colors.border,
+      flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+      padding: spacing.md,
+    }}>
+      <View style={{ width: 36, height: 36, borderRadius: 8, backgroundColor: colors.cardElevated }} />
+      <View style={{ flex: 1, gap: 6 }}>
+        <View style={{ width: '55%', height: 13, borderRadius: 4, backgroundColor: colors.cardElevated }} />
+        <View style={{ flexDirection: 'row', gap: 6 }}>
+          <View style={{ width: 36, height: 10, borderRadius: 4, backgroundColor: colors.cardElevated }} />
+          <View style={{ width: 52, height: 10, borderRadius: 4, backgroundColor: colors.cardElevated }} />
+        </View>
+      </View>
+      <View style={{ width: 18, height: 18, borderRadius: 4, backgroundColor: colors.cardElevated }} />
+    </View>
+  );
+}
+
 // ── All Picks screen (new, separate default — cricket + football,
 //    every league merged into one feed) ─────────────────────────
 
@@ -956,8 +982,25 @@ function AllTipsScreen({ onPickLeague }: { onPickLeague: (id: string) => void })
   const router = useRouter();
   const { leagues } = useLeague();
   const { data: accuracy } = useAccuracy();
-  const { items, isLoading } = useAllTips();
-  const showSkeleton = isLoading && items.length === 0;
+  const queryClient = useQueryClient();
+
+  // Fire bundle first — one request replacing 8+ individual league calls.
+  // Individual useAllTips queries are gated until bundle resolves so they
+  // never race on the HTTP/1.1 connection limit.
+  const bundle = useTipsBundle();
+  const bundleResolved = bundle.isSuccess || bundle.isError;
+
+  const { items, isLoading } = useAllTips({ enabled: bundleResolved });
+  const showSkeleton = !bundleResolved || isLoading;
+
+  const [refreshing, setRefreshing] = useState(false);
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await queryClient.invalidateQueries({ queryKey: ['tips:bundle'] });
+    await queryClient.invalidateQueries({ queryKey: ['tips:list'] });
+    await queryClient.invalidateQueries({ queryKey: ['football:tips'] });
+    setRefreshing(false);
+  }, [queryClient]);
 
   function goToItem(item: AllTipItem) {
     if (item.kind === 'cricket') router.push(`/(tip-detail)/${item.match.id}`);
@@ -972,7 +1015,9 @@ function AllTipsScreen({ onPickLeague }: { onPickLeague: (id: string) => void })
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingHorizontal: spacing.lg, paddingBottom: 100 }}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.accent} colors={[colors.accent]} />}
         >
+          {/* Header — always visible, never blocked by loading */}
           <View style={{ marginBottom: spacing.xl, paddingTop: spacing.md }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 }}>
               <Text style={{ color: colors.accent, fontSize: font.xs, fontWeight: '700', letterSpacing: 2 }}>ALL LEAGUES</Text>
@@ -996,7 +1041,7 @@ function AllTipsScreen({ onPickLeague }: { onPickLeague: (id: string) => void })
                   AI predictions · Cricket & Football
                 </Text>
               </View>
-              {items.length > 0 && (
+              {!showSkeleton && items.length > 0 && (
                 <Text style={{ color: colors.textMuted, fontSize: font.xs }}>
                   {items.length} match{items.length !== 1 ? 'es' : ''} analysed
                 </Text>
@@ -1004,15 +1049,29 @@ function AllTipsScreen({ onPickLeague }: { onPickLeague: (id: string) => void })
             </View>
           </View>
 
+          {/* Skeleton placeholders while bundle loads */}
           {showSkeleton ? (
-            <><PredictionCardSkeleton /><PredictionCardSkeleton /><PredictionCardSkeleton /></>
+            <>
+              <TipLeagueAccordionSkeleton />
+              <TipLeagueAccordionSkeleton />
+              <TipLeagueAccordionSkeleton />
+              <TipLeagueAccordionSkeleton />
+              <TipLeagueAccordionSkeleton />
+            </>
           ) : groups.length === 0 ? (
             <View style={{
               backgroundColor: colors.card, borderRadius: radius.xl,
               padding: spacing.xxxl, alignItems: 'center',
               borderWidth: 1, borderColor: colors.border, marginTop: spacing.xl,
             }}>
-              <Text style={{ fontSize: 40, marginBottom: spacing.lg }}>🤖</Text>
+              <View style={{
+                width: 64, height: 64, borderRadius: 20,
+                backgroundColor: colors.accent + '12',
+                borderWidth: 1, borderColor: colors.accent + '25',
+                alignItems: 'center', justifyContent: 'center', marginBottom: spacing.lg,
+              }}>
+                <Ionicons name="analytics" size={28} color={colors.accent} />
+              </View>
               <Text style={{ color: colors.textPrimary, fontSize: font.xl, fontWeight: '800', marginBottom: spacing.sm }}>
                 No Matches Yet
               </Text>

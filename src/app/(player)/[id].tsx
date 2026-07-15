@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import { useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { safeBack } from '@/utils/navigation';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
@@ -113,7 +114,7 @@ export default function PlayerScreen() {
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }}>
       {/* Header */}
       <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.lg, paddingVertical: spacing.md, backgroundColor: colors.card, borderBottomWidth: 1, borderBottomColor: colors.border }}>
-        <Pressable onPress={() => router.back()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, marginRight: spacing.md })}>
+        <Pressable onPress={() => safeBack()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, marginRight: spacing.md })}>
           <Ionicons name="chevron-back" size={22} color={colors.textPrimary} />
         </Pressable>
         <Text style={{ color: colors.textPrimary, fontSize: font.base, fontWeight: '700', flex: 1 }}>Player Profile</Text>

@@ -124,6 +124,12 @@ async function request<T>(
         const refreshed = await refreshOnce();
         if (refreshed) {
           res = await Promise.race([doFetch(), timeoutPromise]);
+          if (res.status === 401) {
+            await clearRefreshToken();
+            setAccessToken(null);
+            emitAuthExpired();
+            throw new Error('Session expired. Please log in again.');
+          }
         } else {
           await clearRefreshToken();
           setAccessToken(null);
@@ -144,6 +150,58 @@ async function request<T>(
   return fetchWithRetry();
 }
 
+// ── FormData upload (multipart) ───────────────────────────────
+
+async function uploadForm<T>(endpoint: string, formData: FormData): Promise<T> {
+  const url = `${API_BASE_URL}${endpoint}`;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+  const makeHeaders = () => {
+    const h: Record<string, string> = {};
+    if (_accessToken) h['Authorization'] = `Bearer ${_accessToken}`;
+    return h;
+  };
+
+  const doFetch = () =>
+    fetch(url, { method: 'POST', headers: makeHeaders(), body: formData as any, signal: controller.signal });
+
+  try {
+    let res = await doFetch();
+
+    if (res.status === 401) {
+      const body = await res.json().catch(() => ({}));
+      if (body.code === 'TOKEN_EXPIRED') {
+        const refreshed = await refreshOnce();
+        if (refreshed) {
+          res = await doFetch();
+          if (res.status === 401) {
+            await clearRefreshToken();
+            setAccessToken(null);
+            emitAuthExpired();
+            throw new Error('Session expired. Please log in again.');
+          }
+        } else {
+          await clearRefreshToken();
+          setAccessToken(null);
+          emitAuthExpired();
+          throw new Error('Session expired. Please log in again.');
+        }
+      }
+    }
+
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({}));
+      throw new Error(errBody.error ?? `HTTP ${res.status}`);
+    }
+
+    return res.json() as Promise<T>;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // ── Public API ────────────────────────────────────────────────
 
 const api = {
@@ -161,6 +219,9 @@ const api = {
 
   delete: <T>(endpoint: string) =>
     request<T>('DELETE', endpoint),
+
+  postForm: <T>(endpoint: string, formData: FormData) =>
+    uploadForm<T>(endpoint, formData),
 };
 
 export default api;

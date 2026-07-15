@@ -1,12 +1,13 @@
-import { View, Text, Pressable, Image, Animated } from "react-native";
-import { useRef, memo } from "react";
+import { View, Text, Pressable, Image } from "react-native";
+import { memo } from "react";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
-import * as Haptics from "expo-haptics";
+import Animated from "react-native-reanimated";
 import type { Match } from "@/types/match";
 import { formatMatchDate } from "@/utils/date";
 import { getTeamColor, getTeamLogo, colors } from "@/theme/colors";
 import { useCountdown } from "@/hooks/useCountdown";
+import { usePress } from "@/hooks/usePress";
 
 interface NextMatchCardProps {
   match: Match;
@@ -38,31 +39,22 @@ function TeamLogo({ imageId, shortName, size }: { imageId: string; shortName: st
  * Displays the next upcoming IPL match with a live countdown.
  */
 export const NextMatchCard = memo(function NextMatchCard({ match, onPress }: NextMatchCardProps) {
-  const scaleAnim = useRef(new Animated.Value(1)).current;
-  const countdown = useCountdown(match.date);
+  const press      = usePress(0.97);
+  const countdown  = useCountdown(match.date);
   const team1Color = getTeamColor(match.team1.shortName);
   const team2Color = getTeamColor(match.team2.shortName);
 
-  const handlePressIn = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    Animated.spring(scaleAnim, { toValue: 0.97, useNativeDriver: true, speed: 50, bounciness: 4 }).start();
-  };
-  const handlePressOut = () => {
-    Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true, speed: 50, bounciness: 4 }).start();
-  };
-
   return (
-    <Pressable onPress={() => onPress?.(match.id)} onPressIn={handlePressIn} onPressOut={handlePressOut}>
+    <Pressable onPress={() => onPress?.(match.id)} onPressIn={press.onPressIn} onPressOut={press.onPressOut}>
       <Animated.View
-        style={{
-          transform: [{ scale: scaleAnim }],
+        style={[{
           marginBottom: 16,
           shadowColor: "#000",
           shadowOffset: { width: 0, height: 6 },
           shadowOpacity: 0.25,
           shadowRadius: 12,
           elevation: 8,
-        }}
+        }, press.style]}
       >
         {/* Team accent bar */}
         <View style={{ flexDirection: "row", borderTopLeftRadius: 20, borderTopRightRadius: 20, overflow: "hidden" }}>

@@ -1,28 +1,35 @@
-import { useEffect, useRef } from "react";
-import { View, Animated } from "react-native";
+import { useEffect } from "react";
+import { View } from "react-native";
+import Animated, {
+  useSharedValue, useAnimatedStyle,
+  withRepeat, withSequence, withTiming,
+} from "react-native-reanimated";
 import { colors, radius, spacing } from "@/constants/theme";
 
 // ── Animated shimmer bone ─────────────────────────────────────
 export function Bone({
   w, h, br = 8, mb = 0,
 }: { w: number | `${number}%`; h: number; br?: number; mb?: number }) {
-  const opacity = useRef(new Animated.Value(0.25)).current;
+  const opacity = useSharedValue(0.25);
+  const style   = useAnimatedStyle(() => ({ opacity: opacity.value }));
+
   useEffect(() => {
-    const pulse = Animated.loop(
-      Animated.sequence([
-        Animated.timing(opacity, { toValue: 0.55, duration: 750, useNativeDriver: true }),
-        Animated.timing(opacity, { toValue: 0.25, duration: 750, useNativeDriver: true }),
-      ]),
+    opacity.value = withRepeat(
+      withSequence(
+        withTiming(0.55, { duration: 750 }),
+        withTiming(0.25, { duration: 750 }),
+      ),
+      -1,
+      false,
     );
-    pulse.start();
-    return () => pulse.stop();
-  }, [opacity]);
+  }, []);
+
   return (
-    <Animated.View style={{
+    <Animated.View style={[{
       width: w, height: h, borderRadius: br,
       backgroundColor: colors.border,
-      opacity, marginBottom: mb,
-    }} />
+      marginBottom: mb,
+    }, style]} />
   );
 }
 

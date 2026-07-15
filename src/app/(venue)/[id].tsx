@@ -5,6 +5,7 @@
 
 import { View, Text, Pressable, ScrollView, Image, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { safeBack } from '@/utils/navigation';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useVenue } from '@/hooks/useVenue';
@@ -31,7 +32,7 @@ export default function VenueScreen() {
         }}
       >
         <Pressable
-          onPress={() => router.back()}
+          onPress={() => safeBack()}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, marginRight: spacing.md })}
         >

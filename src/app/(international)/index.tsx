@@ -9,6 +9,7 @@
 import { View, Text, Pressable, ActivityIndicator, RefreshControl } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { useRouter } from 'expo-router';
+import { safeBack } from '@/utils/navigation';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { SeriesCard } from '@/components/SeriesCard';
@@ -31,7 +32,7 @@ export default function InternationalScreen() {
         backgroundColor: colors.card, borderBottomWidth: 1, borderBottomColor: colors.border,
       }}>
         <Pressable
-          onPress={() => router.back()}
+          onPress={() => safeBack()}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, marginRight: spacing.md })}
         >

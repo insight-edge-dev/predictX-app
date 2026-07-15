@@ -27,7 +27,8 @@ export interface HomeFeedResult {
 const EMPTY_C = { live: [] as AdaptedMatch[],   upcoming: [] as AdaptedMatch[],   completed: [] as AdaptedMatch[]   };
 const EMPTY_F = { live: [] as FootballMatch[], upcoming: [] as FootballMatch[], completed: [] as FootballMatch[] };
 
-export function useHomeFeed(): HomeFeedResult {
+export function useHomeFeed(options?: { enabled?: boolean }): HomeFeedResult {
+  const enabled = options?.enabled ?? true;
   const { leagues } = useLeague();
 
   // Every in-season cricket league, not just IPL — mirrors useAllMatches'
@@ -42,8 +43,9 @@ export function useHomeFeed(): HomeFeedResult {
       queryKey:        [`homefeed:cricket:${l.id}`],
       queryFn:          () => getLeagueMatches(l.id, false),
       staleTime:        30_000,
-      refetchInterval:  30_000,
+      refetchInterval:  (q) => (q.state.data as any)?.live?.length > 0 ? 30_000 : 5 * 60_000,
       retry:            0,
+      enabled,
     })),
   });
 
@@ -68,8 +70,10 @@ export function useHomeFeed(): HomeFeedResult {
     upcoming.sort(byDate('asc'));
     completed.sort(byDate('desc'));
     return live.length || upcoming.length || completed.length ? { live, upcoming, completed } : EMPTY_C;
+    // Use a stable string key instead of spreading the queries array, whose size
+    // changes when cricketLeagues loads — a variable-size spread violates hook rules.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cricketLeagues, ...cricketQs.map(q => q.data)]);
+  }, [cricketLeagues, cricketQs.map(q => q.dataUpdatedAt).join(',')]);
 
   const footballQ = useQuery({
     queryKey: ['homefeed:football'],
@@ -83,7 +87,8 @@ export function useHomeFeed(): HomeFeedResult {
     },
     staleTime:       30_000,
     refetchInterval: (q) => (q.state.data?.live.length ? 30_000 : 120_000),
-    retry: 1,
+    retry:   1,
+    enabled,
   });
 
   return {

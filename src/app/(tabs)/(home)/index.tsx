@@ -560,7 +560,6 @@ function NewsCard({ item, onPress, featured }: { item: NewsItem; onPress: () => 
             contentFit="cover"
             cachePolicy="disk"
             transition={300}
-            placeholder={{ color: colors.cardElevated }}
           />
           <LinearGradient colors={['transparent', 'rgba(0,0,0,0.82)']} style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: spacing.lg }}>
             {item.storyType && (
@@ -586,7 +585,6 @@ function NewsCard({ item, onPress, featured }: { item: NewsItem; onPress: () => 
               contentFit="cover"
               cachePolicy="disk"
               transition={250}
-              placeholder={{ color: colors.cardElevated }}
             />
           : <View style={{ width: 90, height: 88, backgroundColor: colors.cardElevated, alignItems: 'center', justifyContent: 'center' }}>
               <MaterialCommunityIcons name="cricket" size={24} color={colors.textMuted} />
@@ -1172,8 +1170,8 @@ function FootballHomeScreen() {
             </View>
           )}
 
-          {/* ── Countdown card (pre-tournament, no upcoming fixtures) ── */}
-          {!isLoading && !featuredMatch && liveMatches.length === 0 && (() => {
+          {/* ── Countdown card (pre-tournament only, no upcoming fixtures) ── */}
+          {!isLoading && !featuredMatch && liveMatches.length === 0 && Date.now() < new Date('2026-06-11T00:00:00Z').getTime() && (() => {
             const kickoff    = new Date('2026-06-11T00:00:00Z');
             const diffMs     = kickoff.getTime() - Date.now();
             const diffDays   = Math.max(0, Math.floor(diffMs / 86400000));
@@ -1652,7 +1650,7 @@ function CricketHomeScreen() {
             <QuickActions onFixtures={goFixtures} onTips={goTips} onStandings={goFixtures} onExpert={goExpert} />
 
             {/* ── International Cricket entry point — only on default (IPL) home ── */}
-            {league.slug === 'ipl' && (
+            {league.id === 'ipl' && (
               <InternationalBanner onPress={() => router.push('/(international)' as any)} />
             )}
 

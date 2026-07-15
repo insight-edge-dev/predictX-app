@@ -1,63 +1,55 @@
-import { useEffect, useRef } from "react";
-import { View, Text, Animated, Easing, Dimensions } from "react-native";
+import { useEffect } from "react";
+import { View, Text, Dimensions } from "react-native";
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  withSpring,
+  withRepeat,
+  Easing,
+} from "react-native-reanimated";
 import Svg, { Circle, Ellipse, Line } from "react-native-svg";
 import { colors } from "@/constants/theme";
+import { springs, timings } from "@/utils/anim";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const FIELD_SIZE = SCREEN_WIDTH * 1.6;
 const CENTER = FIELD_SIZE / 2;
 
 export default function LoadingScreen() {
-  const fade = useRef(new Animated.Value(0)).current;
-  const scale = useRef(new Animated.Value(0.92)).current;
-  const spin = useRef(new Animated.Value(0)).current;
-  const fieldSpin = useRef(new Animated.Value(0)).current;
+  const fade          = useSharedValue(0);
+  const scale         = useSharedValue(0.92);
+  const rotation      = useSharedValue(0);
+  const fieldRotation = useSharedValue(0);
 
   useEffect(() => {
-    Animated.parallel([
-      Animated.timing(fade, { toValue: 1, duration: 450, useNativeDriver: true }),
-      Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 12, bounciness: 6 }),
-    ]).start();
+    fade.value  = withTiming(1, timings.slow);
+    scale.value = withSpring(1, springs.bouncy);
+    rotation.value      = withRepeat(withTiming(360, { duration: 900,   easing: Easing.linear }), -1, false);
+    fieldRotation.value = withRepeat(withTiming(360, { duration: 90000, easing: Easing.linear }), -1, false);
+  }, []);
 
-    const loop = Animated.loop(
-      Animated.timing(spin, {
-        toValue: 1,
-        duration: 900,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      }),
-    );
-    loop.start();
-
-    const fieldLoop = Animated.loop(
-      Animated.timing(fieldSpin, {
-        toValue: 1,
-        duration: 90000,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      }),
-    );
-    fieldLoop.start();
-
-    return () => {
-      loop.stop();
-      fieldLoop.stop();
-    };
-  }, [fade, scale, spin, fieldSpin]);
-
-  const rotate = spin.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "360deg"] });
-  const fieldRotate = fieldSpin.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "360deg"] });
+  const fieldStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${fieldRotation.value}deg` }],
+  }));
+  const contentStyle = useAnimatedStyle(() => ({
+    opacity:   fade.value,
+    transform: [{ scale: scale.value }],
+  }));
+  const spinStyle = useAnimatedStyle(() => ({
+    opacity:   fade.value,
+    transform: [{ rotate: `${rotation.value}deg` }],
+  }));
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg, alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
       {/* Decorative cricket-ground rings, slowly rotating in the background */}
       <Animated.View
-        style={{
+        style={[{
           position: "absolute",
           width: FIELD_SIZE,
           height: FIELD_SIZE,
-          transform: [{ rotate: fieldRotate }],
-        }}
+        }, fieldStyle]}
       >
         <Svg width={FIELD_SIZE} height={FIELD_SIZE} viewBox={`0 0 ${FIELD_SIZE} ${FIELD_SIZE}`}>
           {/* Boundary */}
@@ -72,7 +64,7 @@ export default function LoadingScreen() {
         </Svg>
       </Animated.View>
 
-      <Animated.View style={{ opacity: fade, transform: [{ scale }], alignItems: "center" }}>
+      <Animated.View style={[{ alignItems: "center" }, contentStyle]}>
         <Text style={{ fontSize: 38, fontWeight: "900", letterSpacing: -1, color: colors.textPrimary }}>
           Predict<Text style={{ color: colors.accent }}>X</Text>
         </Text>
@@ -82,7 +74,7 @@ export default function LoadingScreen() {
       </Animated.View>
 
       <Animated.View
-        style={{
+        style={[{
           position: "absolute",
           bottom: 90,
           width: 28,
@@ -91,9 +83,7 @@ export default function LoadingScreen() {
           borderWidth: 3,
           borderColor: colors.border,
           borderTopColor: colors.accent,
-          opacity: fade,
-          transform: [{ rotate }],
-        }}
+        }, spinStyle]}
       />
     </View>
   );

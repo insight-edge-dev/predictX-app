@@ -13,22 +13,31 @@ export interface League {
   format:    string;
   image?:    string;
   sport:     'cricket' | 'football';
+  /** Backend-computed: 'active' = fixtures in -10d/+45d window; 'completed' = season ended. */
+  status?:   'active' | 'completed';
   /** Admin-set "featured/pinned" override — higher sorts first. 0 = no override. */
   priority?: number;
 }
 
 export const FALLBACK_LEAGUES: League[] = [
-  // Cricket
-  { id: 'ipl',      name: 'Indian Premier League',     short: 'IPL',      flag: '🏏', season: '2026',    country: 'India',         format: 'T20',   sport: 'cricket' },
-  { id: 'psl',      name: 'Pakistan Super League',     short: 'PSL',      flag: '🟢', season: '2026',    country: 'Pakistan',      format: 'T20',   sport: 'cricket' },
-  { id: 'gsl',      name: 'Global Super League',       short: 'GSL',      flag: '🌐', season: '2026',    country: 'West Indies',   format: 'T20',   sport: 'cricket' },
-  { id: 't20wc',    name: "ICC Men's T20 World Cup",   short: 'T20 WC',   flag: '🌍', season: '2026',    country: 'International', format: 'T20',   sport: 'cricket' },
-  { id: 't20blast', name: 'T20 Blast',                 short: 'T20 Blast',flag: '🏴󠁧󠁢󠁥󠁮󠁧󠁿', season: '2026',   country: 'England',       format: 'T20',   sport: 'cricket' },
-  { id: 'bbl',      name: 'Big Bash League',           short: 'BBL',      flag: '🦘', season: '2025/26', country: 'Australia',     format: 'T20',   sport: 'cricket' },
-  { id: 'bpl',      name: 'Bangladesh Premier League', short: 'BPL',      flag: '🟥', season: '2025/26', country: 'Bangladesh',    format: 'T20',   sport: 'cricket' },
-  { id: 'csa_t20',  name: 'CSA T20 Challenge',         short: 'CSA T20',  flag: '🦁', season: '2025',    country: 'South Africa',  format: 'T20',   sport: 'cricket' },
+  // Cricket — active
+  { id: 'ipl',       name: 'Indian Premier League',       short: 'IPL',        flag: '🏏', season: '2026',    country: 'India',              format: 'T20',   sport: 'cricket',  status: 'active' },
+  { id: 'gsl',       name: 'Global Super League',         short: 'GSL',        flag: '🌐', season: '2026',    country: 'West Indies',        format: 'T20',   sport: 'cricket',  status: 'active' },
+  { id: 't20wc',     name: "ICC Men's T20 World Cup",     short: 'T20 WC',     flag: '🌍', season: '2026',    country: 'International',      format: 'T20',   sport: 'cricket',  status: 'active' },
+  { id: 't20blast',  name: 'T20 Blast',                   short: 'T20 Blast',  flag: '🏴󠁧󠁢󠁥󠁮󠁧󠁿', season: '2026',  country: 'England',            format: 'T20',   sport: 'cricket',  status: 'active' },
+  { id: 't20blastw', name: "T20 Blast Women's",           short: 'T20 Blast W',flag: '🏴󠁧󠁢󠁥󠁮󠁧󠁿', season: '2026',  country: 'England',            format: 'T20',   sport: 'cricket',  status: 'active' },
+  { id: 't20mumbai', name: 'T20 Mumbai',                  short: 'T20 Mum',    flag: '🏙', season: '2026',    country: 'India',              format: 'T20',   sport: 'cricket',  status: 'active' },
+  { id: 'supersmash',name: 'Super Smash',                 short: 'SS',         flag: '🥝', season: '2025/26', country: 'New Zealand',        format: 'T20',   sport: 'cricket',  status: 'active' },
+  { id: 'ashes',     name: 'Ashes Series',                short: 'Ashes',      flag: '🏺', season: '2025/26', country: 'England / Australia',format: 'Test',  sport: 'cricket',  status: 'active' },
+  // Cricket — completed
+  { id: 'psl',       name: 'Pakistan Super League',       short: 'PSL',        flag: '🟢', season: '2026',    country: 'Pakistan',           format: 'T20',   sport: 'cricket',  status: 'completed' },
+  { id: 'bbl',       name: 'Big Bash League',             short: 'BBL',        flag: '🦘', season: '2025/26', country: 'Australia',          format: 'T20',   sport: 'cricket',  status: 'completed' },
+  { id: 'bpl',       name: 'Bangladesh Premier League',   short: 'BPL',        flag: '🟥', season: '2025/26', country: 'Bangladesh',         format: 'T20',   sport: 'cricket',  status: 'completed' },
+  { id: 'csa_t20',   name: 'CSA T20 Challenge',           short: 'CSA T20',    flag: '🦁', season: '2025',    country: 'South Africa',       format: 'T20',   sport: 'cricket',  status: 'completed' },
+  { id: 'iml',       name: 'International Masters League',short: 'IML',        flag: '🌍', season: '2025',    country: 'International',      format: 'T20',   sport: 'cricket',  status: 'completed' },
+  { id: 'wwct20',    name: "ICC Women's T20 World Cup",   short: 'WWCT20',     flag: '🏏', season: '2026',    country: 'World',              format: 'T20',   sport: 'cricket',  status: 'completed' },
   // Football
-  { id: 'wc2026',   name: 'FIFA World Cup 2026',       short: 'WC',       flag: '🏆', season: '2026',    country: 'USA/CAN/MEX',   format: '90min', sport: 'football' },
+  { id: 'wc2026',    name: 'FIFA World Cup 2026',         short: 'WC',         flag: '🏆', season: '2026',    country: 'USA/CAN/MEX',        format: '90min', sport: 'football', status: 'active' },
 ];
 
 export type LeagueId = string;
@@ -76,6 +85,7 @@ export function LeagueProvider({ children }: { children: React.ReactNode }) {
           format:   l.format  ?? 'T20',
           image:    l.image,
           sport:    (l.sport === 'football' ? 'football' : 'cricket') as 'cricket' | 'football',
+          status:   (l.status === 'completed' ? 'completed' : 'active') as 'active' | 'completed',
           priority: l.priority ?? 0,
         }));
         // Deduplicate by id in case backend sends collisions
@@ -85,16 +95,15 @@ export function LeagueProvider({ children }: { children: React.ReactNode }) {
           seen.add(l.id);
           return true;
         });
-        // The dynamic /leagues endpoint returns every league Sportsmonks knows about
-        // (~24), but only the ones in FALLBACK_LEAGUES are actually wired up for match
-        // data end-to-end (leaguesConfig.js's LEAGUES/FOOTBALL_LEAGUES). Selecting any
-        // other dynamic-only league (e.g. "ecs_252") crashes downstream when match data
-        // is fetched for it, so the picker must never offer them.
-        const supportedIds = new Set(FALLBACK_LEAGUES.map(l => l.id));
-        const supported = unique.filter(l => supportedIds.has(l.id));
-        if (supported.length > 0) setLeagues(supported);
+        // Backend already filters to only active leagues (fixture window -10d/+45d)
+        // so we trust it directly — no client-side whitelist needed.
+        if (unique.length > 0) setLeagues(unique);
       })
-      .catch(e => console.error('[LeagueContext] fetch failed:', e));
+      .catch(e => {
+        // AbortError is expected on fast-refresh / unmount — fallback leagues stay active
+        if (e?.name === 'AbortError') return;
+        console.error('[LeagueContext] fetch failed:', e);
+      });
   }, []);
 
   const league = leagues.find(l => l.id === leagueId) ?? leagues[0];

@@ -19,6 +19,8 @@ const CODE_ISO2: Record<string, string> = {
   UAE: 'ae', USA: 'us', CAN: 'ca', NAM: 'na', OMA: 'om', PNG: 'pg', KEN: 'ke',
   UGA: 'ug', QAT: 'qa', HKG: 'hk', SIN: 'sg', MAS: 'my', VAN: 'vu', BHU: 'bt',
   BHR: 'bh', KUW: 'kw', SAU: 'sa', MLT: 'mt',
+  // West Indies — composite team, use TT as closest single-nation proxy
+  WI: 'tt', WIN: 'tt', WES: 'tt',
 
   // UK home nations (flagcdn.com supports gb-eng / gb-sct / gb-wls / gb-nir)
   ENG: 'gb-eng', SCO: 'gb-sct', WAL: 'gb-wls', NIR: 'gb-nir',
@@ -66,6 +68,7 @@ const NAME_ISO2: Record<string, string> = {
   INDIA: 'in', AUSTRALIA: 'au', PAKISTAN: 'pk', 'SOUTH AFRICA': 'za',
   'NEW ZEALAND': 'nz', 'SRI LANKA': 'lk', BANGLADESH: 'bd', AFGHANISTAN: 'af',
   IRELAND: 'ie', ZIMBABWE: 'zw', NETHERLANDS: 'nl', NEPAL: 'np',
+  'WEST INDIES': 'tt', // composite team — TT as closest proxy
   'UNITED ARAB EMIRATES': 'ae', 'UNITED STATES': 'us', CANADA: 'ca',
   NAMIBIA: 'na', OMAN: 'om', 'PAPUA NEW GUINEA': 'pg', KENYA: 'ke',
   ENGLAND: 'gb-eng', SCOTLAND: 'gb-sct', WALES: 'gb-wls', 'NORTHERN IRELAND': 'gb-nir',

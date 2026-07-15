@@ -1,30 +1,34 @@
-import { useEffect, useRef } from "react";
-import { View, Animated } from "react-native";
+import { useEffect } from "react";
+import { View } from "react-native";
+import Animated, {
+  useSharedValue, useAnimatedStyle,
+  withRepeat, withSequence, withTiming,
+} from "react-native-reanimated";
 import { colors, spacing, radius } from "@/constants/theme";
 
 function Bone({ width, height, r = 6 }: { width: number | string; height: number; r?: number }) {
-  const opacity = useRef(new Animated.Value(0.5)).current;
+  const opacity = useSharedValue(0.5);
+  const style   = useAnimatedStyle(() => ({ opacity: opacity.value }));
 
   useEffect(() => {
-    const pulse = Animated.loop(
-      Animated.sequence([
-        Animated.timing(opacity, { toValue: 1,   duration: 700, useNativeDriver: true }),
-        Animated.timing(opacity, { toValue: 0.5, duration: 700, useNativeDriver: true }),
-      ])
+    opacity.value = withRepeat(
+      withSequence(
+        withTiming(1,   { duration: 700 }),
+        withTiming(0.5, { duration: 700 }),
+      ),
+      -1,
+      false,
     );
-    pulse.start();
-    return () => pulse.stop();
   }, []);
 
   return (
     <Animated.View
-      style={{
-        width,
+      style={[{
+        width: width as number,
         height,
         borderRadius: r,
         backgroundColor: colors.borderLight,
-        opacity,
-      }}
+      }, style]}
     />
   );
 }

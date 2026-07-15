@@ -1,7 +1,14 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import {
-  View, Text, Pressable, Image, Animated,
+  View, Text, Pressable, Image,
 } from 'react-native';
+import Animated, {
+  useSharedValue, useAnimatedStyle,
+  withRepeat, withTiming, withSpring, withDelay,
+  interpolate, Extrapolation,
+  Easing,
+} from 'react-native-reanimated';
+import { springs, timings, STAGGER_STEP_MS, STAGGER_MAX_MS } from '@/utils/anim';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, font, radius } from '@/constants/theme';
 import { getTeamColor } from '@/theme/colors';
@@ -99,18 +106,18 @@ export function timeAgo(ts: number | null) {
 
 // ── SectionHeader ─────────────────────────────────────────────
 
-export function SectionHeader({ emoji, title, badge, onMore, moreLabel = 'See all →' }: {
-  emoji: string; title: string; badge?: number; onMore?: () => void; moreLabel?: string;
+export function SectionHeader({ emoji: _emoji, title, badge, onMore, moreLabel = 'See all →' }: {
+  emoji?: string; title: string; badge?: number; onMore?: () => void; moreLabel?: string;
 }) {
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: spacing.md }}>
-      <Text style={{ fontSize: 16, marginRight: 6 }}>{emoji}</Text>
-      <Text style={{ color: colors.textPrimary, fontSize: font.md, fontWeight: '800', flex: 1 }}>{title}</Text>
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.md }}>
+      <Text style={{ color: colors.textPrimary, fontSize: font.md, fontWeight: '800' }}>{title}</Text>
       {badge !== undefined && badge > 0 && (
-        <View style={{ backgroundColor: C_LIVE, borderRadius: 8, paddingHorizontal: 7, paddingVertical: 2, marginRight: spacing.xs }}>
+        <View style={{ backgroundColor: C_LIVE, borderRadius: 8, paddingHorizontal: 7, paddingVertical: 2 }}>
           <Text style={{ color: '#fff', fontSize: 9, fontWeight: '900' }}>{badge}</Text>
         </View>
       )}
+      <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
       {onMore && (
         <Pressable onPress={onMore}>
           <Text style={{ color: colors.accent, fontSize: font.xs, fontWeight: '700' }}>{moreLabel}</Text>
@@ -148,6 +155,21 @@ export function LiveSectionHeader({ count }: { count: number }) {
 export function AccuracyBadge({ percentage, sampleSize, compact, label }: {
   percentage: number; sampleSize: number; compact?: boolean; label?: string;
 }) {
+  const [displayedPct, setDisplayedPct] = useState(0);
+  useEffect(() => {
+    if (!sampleSize) { setDisplayedPct(percentage); return; }
+    const duration = 1200;
+    const start = Date.now();
+    let raf: ReturnType<typeof requestAnimationFrame>;
+    const step = () => {
+      const t = Math.min((Date.now() - start) / duration, 1);
+      setDisplayedPct(Math.round(percentage * (1 - Math.pow(1 - t, 3))));
+      if (t < 1) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [percentage, sampleSize]);
+
   if (!sampleSize) return null;
   const tint = percentage >= 65 ? colors.success : colors.accent;
 
@@ -161,7 +183,7 @@ export function AccuracyBadge({ percentage, sampleSize, compact, label }: {
       }}>
         <Ionicons name="locate" size={10} color={tint} />
         <Text style={{ color: tint, fontSize: 10, fontWeight: '800' }}>
-          {percentage}% Accuracy
+          {displayedPct}% Accuracy
         </Text>
       </View>
     );
@@ -180,7 +202,7 @@ export function AccuracyBadge({ percentage, sampleSize, compact, label }: {
         </Text>
       )}
       <Text style={{ color: tint, fontSize: 20, fontWeight: '900', letterSpacing: -0.5, lineHeight: 22 }}>
-        {percentage}%
+        {displayedPct}%
       </Text>
       <Text style={{ color: tint, fontSize: 8, fontWeight: '800', letterSpacing: 1 }}>
         ACCURACY
@@ -234,18 +256,31 @@ export function LeagueTrackRecordCard({ card, index, defaultExpanded = true, onP
   const [showAll, setShowAll] = useState(false);
   const accent = CARD_ACCENTS[index % CARD_ACCENTS.length];
   const INITIAL_VISIBLE = 3;
-  const visibleMatches = !expanded ? [] : showAll ? card.recentMatches : card.recentMatches.slice(0, INITIAL_VISIBLE);
+  const visibleMatches = showAll ? card.recentMatches : card.recentMatches.slice(0, INITIAL_VISIBLE);
   const hiddenCount = card.recentMatches.length - INITIAL_VISIBLE;
 
+  const entryOpacity    = useSharedValue(0);
+  const entryTranslateY = useSharedValue(16);
+  const accordionHeight = useSharedValue(defaultExpanded ? 2000 : 0);
+
+  const entryStyle     = useAnimatedStyle(() => ({ opacity: entryOpacity.value, transform: [{ translateY: entryTranslateY.value }] }));
+  const accordionStyle = useAnimatedStyle(() => ({ maxHeight: accordionHeight.value, overflow: 'hidden' as any }));
+
+  useEffect(() => {
+    const delay = Math.min(index * STAGGER_STEP_MS, STAGGER_MAX_MS);
+    entryOpacity.value    = withDelay(delay, withTiming(1, timings.medium));
+    entryTranslateY.value = withDelay(delay, withSpring(0, springs.smooth));
+  }, []);
+
   return (
-    <View style={{
+    <Animated.View style={[{
       backgroundColor: colors.card, borderRadius: radius.lg,
       borderWidth: 1, borderColor: colors.border,
       borderLeftWidth: 3, borderLeftColor: accent,
       padding: spacing.md, marginBottom: spacing.md, overflow: 'hidden',
       shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 8, shadowOffset: { width: 0, height: 3 },
       elevation: 2,
-    }}>
+    }, entryStyle]}>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flex: 1 }}>
           {card.image ? (
@@ -283,7 +318,12 @@ export function LeagueTrackRecordCard({ card, index, defaultExpanded = true, onP
             </View>
           )}
           {card.recentMatches.length > 1 && (
-            <Pressable onPress={() => setExpanded(e => { if (e) setShowAll(false); return !e; })} hitSlop={8} style={{
+            <Pressable onPress={() => setExpanded(e => {
+              const next = !e;
+              if (!next) setShowAll(false);
+              accordionHeight.value = withSpring(next ? 2000 : 0, springs.smooth);
+              return next;
+            })} hitSlop={8} style={{
               width: 28, height: 28, borderRadius: 14, backgroundColor: colors.bg,
               borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center',
             }}>
@@ -293,8 +333,8 @@ export function LeagueTrackRecordCard({ card, index, defaultExpanded = true, onP
         </View>
       </View>
 
-      <View style={expanded ? { marginTop: spacing.sm } : undefined}>
-        {!expanded ? null : card.recentMatches.length === 0 ? (
+      <Animated.View style={[{ marginTop: spacing.sm }, accordionStyle]}>
+        {card.recentMatches.length === 0 ? (
           <Text style={{ color: colors.textMuted, fontSize: font.xs, paddingVertical: spacing.sm }}>
             No recent completed matches yet
           </Text>
@@ -356,7 +396,7 @@ export function LeagueTrackRecordCard({ card, index, defaultExpanded = true, onP
             );
           })
         )}
-        {expanded && hiddenCount > 0 && (
+        {hiddenCount > 0 && (
           <Pressable onPress={() => setShowAll(s => !s)} style={{
             alignItems: 'center', paddingVertical: 8, marginTop: 4,
           }}>
@@ -365,8 +405,8 @@ export function LeagueTrackRecordCard({ card, index, defaultExpanded = true, onP
             </Text>
           </Pressable>
         )}
-      </View>
-    </View>
+      </Animated.View>
+    </Animated.View>
   );
 }
 
@@ -486,25 +526,24 @@ export function LeagueLogo({ image, flag, color, size = 36 }: {
 // ── PulsingDot — animated "live" indicator (radar-ping style) ──
 
 export function PulsingDot({ color, size = 6 }: { color: string; size?: number }) {
-  const pulse = useRef(new Animated.Value(0)).current;
+  const pulse = useSharedValue(0);
 
   useEffect(() => {
-    const loop = Animated.loop(
-      Animated.timing(pulse, { toValue: 1, duration: 1200, useNativeDriver: true }),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [pulse]);
+    pulse.value = withRepeat(withTiming(1, { duration: 1200, easing: Easing.linear }), -1, false);
+  }, []);
+
+  const ringStyle = useAnimatedStyle(() => ({
+    opacity:   interpolate(pulse.value, [0, 1], [0.55, 0],  Extrapolation.CLAMP),
+    transform: [{ scale: interpolate(pulse.value, [0, 1], [1, 2.6], Extrapolation.CLAMP) }],
+  }));
 
   return (
     <View style={{ width: size * 2.4, height: size * 2.4, alignItems: 'center', justifyContent: 'center' }}>
       <Animated.View
-        style={{
+        style={[{
           position: 'absolute', width: size, height: size, borderRadius: size / 2,
           backgroundColor: color,
-          opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.55, 0] }),
-          transform: [{ scale: pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 2.6] }) }],
-        }}
+        }, ringStyle]}
       />
       <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: color }} />
     </View>
@@ -684,6 +723,150 @@ export function FootballMatchCard({ match, onPress }: { match: FootballMatch; on
           <Ionicons name="chevron-forward" size={14} color={colors.textMuted} />
         </View>
       </View>
+    </Pressable>
+  );
+}
+
+// ── Coming Up: group header + compact rows ────────────────────
+
+export function MatchGroupHeader({
+  label, sport,
+}: {
+  label: string;
+  sport: 'cricket' | 'football' | 'international';
+}) {
+  const clr = sport === 'football' ? colors.accent
+    : sport === 'international' ? colors.success
+    : C_CRICKET_TAG;
+  const ico = sport === 'football' ? 'football-outline' as const
+    : sport === 'international' ? 'earth-outline' as const
+    : 'baseball-outline' as const;
+
+  return (
+    <View style={{
+      flexDirection: 'row', alignItems: 'center',
+      gap: spacing.sm, marginBottom: 8,
+    }}>
+      <View style={{
+        flexDirection: 'row', alignItems: 'center', gap: 4,
+        backgroundColor: `${clr}15`, borderRadius: 20,
+        paddingHorizontal: 10, paddingVertical: 4,
+      }}>
+        <Ionicons name={ico} size={10} color={clr} />
+        <Text style={{
+          color: clr, fontSize: 9,
+          fontWeight: '800', letterSpacing: 0.8,
+        }}>
+          {label.toUpperCase()}
+        </Text>
+      </View>
+      <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
+    </View>
+  );
+}
+
+/** Compact upcoming cricket row — no league pill, ~56px tall */
+export function CompactCricketRow({
+  match, onPress,
+}: { match: AdaptedMatch; onPress: () => void }) {
+  const dateStr = isToday(match.date)
+    ? match.time
+    : `${shortDate(match.date).replace(/,/g, '')} · ${match.time}`;
+
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => ({
+        opacity: pressed ? 0.85 : 1,
+        flexDirection: 'row', alignItems: 'center',
+        backgroundColor: colors.card,
+        borderRadius: radius.md,
+        borderWidth: 1, borderColor: colors.border,
+        marginBottom: 6,
+        paddingHorizontal: spacing.md,
+        paddingVertical: 10,
+        shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.03, shadowRadius: 2, elevation: 1,
+      })}
+    >
+      {/* Home team */}
+      <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 7 }}>
+        <TeamBadge logo={match.team1Logo} code={match.team1Short} name={match.team1Name} size={28} />
+        <Text style={{ color: colors.textPrimary, fontSize: font.sm, fontWeight: '700', flex: 1 }} numberOfLines={1}>
+          {match.team1Short}
+        </Text>
+      </View>
+
+      {/* Centre: vs + date */}
+      <View style={{ alignItems: 'center', paddingHorizontal: 6, minWidth: 72 }}>
+        <Text style={{ color: colors.textMuted, fontSize: 9, fontWeight: '700' }}>vs</Text>
+        <Text style={{ color: colors.textMuted, fontSize: 8, marginTop: 2, textAlign: 'center' }} numberOfLines={2}>
+          {dateStr}
+        </Text>
+      </View>
+
+      {/* Away team */}
+      <View style={{ flex: 1, flexDirection: 'row-reverse', alignItems: 'center', gap: 7 }}>
+        <TeamBadge logo={match.team2Logo} code={match.team2Short} name={match.team2Name} size={28} />
+        <Text style={{ color: colors.textPrimary, fontSize: font.sm, fontWeight: '700', flex: 1, textAlign: 'right' }} numberOfLines={1}>
+          {match.team2Short}
+        </Text>
+      </View>
+
+      <Ionicons name="chevron-forward" size={12} color={colors.textMuted} style={{ marginLeft: 6 }} />
+    </Pressable>
+  );
+}
+
+/** Compact upcoming football row — ~56px tall */
+export function CompactFootballRow({
+  match, onPress,
+}: { match: FootballMatch; onPress: () => void }) {
+  const dateStr = isToday(match.date)
+    ? match.time
+    : `${shortDate(match.date).replace(/,/g, '')} · ${match.time}`;
+
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => ({
+        opacity: pressed ? 0.85 : 1,
+        flexDirection: 'row', alignItems: 'center',
+        backgroundColor: colors.card,
+        borderRadius: radius.md,
+        borderWidth: 1, borderColor: colors.border,
+        marginBottom: 6,
+        paddingHorizontal: spacing.md,
+        paddingVertical: 10,
+        shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.03, shadowRadius: 2, elevation: 1,
+      })}
+    >
+      {/* Home team */}
+      <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 7 }}>
+        <TeamBadge logo={match.homeTeam.logo} code={match.homeTeam.shortName} name={match.homeTeam.name} size={28} />
+        <Text style={{ color: colors.textPrimary, fontSize: font.sm, fontWeight: '700', flex: 1 }} numberOfLines={1}>
+          {match.homeTeam.shortName}
+        </Text>
+      </View>
+
+      {/* Centre: vs + date */}
+      <View style={{ alignItems: 'center', paddingHorizontal: 6, minWidth: 72 }}>
+        <Text style={{ color: colors.textMuted, fontSize: 9, fontWeight: '700' }}>vs</Text>
+        <Text style={{ color: colors.textMuted, fontSize: 8, marginTop: 2, textAlign: 'center' }} numberOfLines={2}>
+          {dateStr}
+        </Text>
+      </View>
+
+      {/* Away team */}
+      <View style={{ flex: 1, flexDirection: 'row-reverse', alignItems: 'center', gap: 7 }}>
+        <TeamBadge logo={match.awayTeam.logo} code={match.awayTeam.shortName} name={match.awayTeam.name} size={28} />
+        <Text style={{ color: colors.textPrimary, fontSize: font.sm, fontWeight: '700', flex: 1, textAlign: 'right' }} numberOfLines={1}>
+          {match.awayTeam.shortName}
+        </Text>
+      </View>
+
+      <Ionicons name="chevron-forward" size={12} color={colors.textMuted} style={{ marginLeft: 6 }} />
     </Pressable>
   );
 }
@@ -964,13 +1147,12 @@ export function WCStatCard({ card }: { card: StatCard }) {
   return (
     <View style={{
       width: 148, backgroundColor: colors.card, borderRadius: radius.lg,
-      borderWidth: 1, borderColor: card.color + '35',
-      padding: spacing.md, overflow: 'hidden',
+      borderWidth: 1, borderColor: card.color + '25',
+      borderLeftWidth: 3, borderLeftColor: card.color,
+      padding: spacing.md, paddingTop: spacing.md + 2, overflow: 'hidden',
     }}>
-      <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, backgroundColor: card.color }} />
-      <Text style={{ fontSize: 24, marginBottom: 6, marginTop: 4 }}>{card.icon}</Text>
-      <Text style={{ color: card.color, fontSize: 18, fontWeight: '900', letterSpacing: -0.5 }}>{card.stat}</Text>
-      <Text style={{ color: colors.textPrimary, fontSize: 10, fontWeight: '700', marginTop: 3 }}>{card.title}</Text>
+      <Text style={{ color: card.color, fontSize: 20, fontWeight: '900', letterSpacing: -0.5 }}>{card.stat}</Text>
+      <Text style={{ color: colors.textPrimary, fontSize: 10, fontWeight: '700', marginTop: 4 }}>{card.title}</Text>
       <Text style={{ color: colors.textMuted, fontSize: 9, marginTop: 3, lineHeight: 13 }}>{card.desc}</Text>
     </View>
   );
@@ -978,69 +1160,158 @@ export function WCStatCard({ card }: { card: StatCard }) {
 
 // ── ICC Ranking cards ──────────────────────────────────────────
 
+const RANK_MEDAL = ['#F59E0B', '#6B7280', '#B45309'] as const; // gold, silver, bronze
+
 export function RankingTeamCard({ team }: { team: RankingTeam }) {
   const [imageFailed, setImageFailed] = useState(false);
+  // Priority: Cricbuzz team logo → country flag CDN → initials
+  const imageUri = (team.image && !imageFailed)
+    ? team.image
+    : (countryFlagUrl(team.name) ?? null);
+  const rank     = team.rank ?? 0;
+  const isTop3   = rank >= 1 && rank <= 3;
+  const medalClr = isTop3 ? RANK_MEDAL[rank - 1] : colors.textMuted;
+
   return (
     <View style={{
-      width: 104, backgroundColor: colors.card, borderRadius: radius.lg,
-      borderWidth: 1, borderColor: colors.border,
-      padding: spacing.md, alignItems: 'center',
+      width: 108,
+      backgroundColor: colors.card,
+      borderRadius: radius.lg,
+      borderWidth: 1,
+      borderColor: isTop3 ? `${medalClr}30` : colors.border,
+      borderTopWidth: isTop3 ? 3 : 1,
+      borderTopColor: isTop3 ? medalClr : colors.border,
+      paddingHorizontal: spacing.sm,
+      paddingTop: spacing.md,
+      paddingBottom: spacing.md,
+      alignItems: 'center',
+      gap: 6,
     }}>
-      <Text style={{ color: colors.accent, fontSize: 11, fontWeight: '900', marginBottom: 6 }}>#{team.rank}</Text>
-      {team.image && !imageFailed ? (
+      {/* Rank badge */}
+      <Text style={{
+        color: medalClr,
+        fontSize: 10, fontWeight: '800',
+        letterSpacing: 0.5,
+      }}>
+        #{rank}
+      </Text>
+
+      {/* Flag / team logo */}
+      {imageUri ? (
         <Image
-          source={{ uri: team.image }}
-          style={{ width: 32, height: 32, marginBottom: 6 }}
+          source={{ uri: imageUri }}
+          style={{ width: 40, height: 40 }}
           resizeMode="contain"
           onError={() => setImageFailed(true)}
         />
       ) : (
         <View style={{
-          width: 32, height: 32, borderRadius: 16, marginBottom: 6,
-          backgroundColor: colors.accentDim, alignItems: 'center', justifyContent: 'center',
+          width: 40, height: 40, borderRadius: 20,
+          backgroundColor: `${medalClr}18`,
+          alignItems: 'center', justifyContent: 'center',
         }}>
-          <Text style={{ fontSize: 16 }}>{cricketFlag(team.name)}</Text>
+          <Text style={{ color: medalClr, fontSize: 10, fontWeight: '800' }}>
+            {(team.name || '?').slice(0, 3).toUpperCase()}
+          </Text>
         </View>
       )}
-      <Text style={{ color: colors.textPrimary, fontSize: font.xs, fontWeight: '800' }} numberOfLines={1}>
-        {team.code || team.name}
+
+      {/* Team name */}
+      <Text style={{
+        color: colors.textPrimary, fontSize: 11, fontWeight: '700',
+        textAlign: 'center',
+      }} numberOfLines={1}>
+        {team.name}
       </Text>
-      <Text style={{ color: colors.textMuted, fontSize: 9, marginTop: 2 }}>{team.rating} pts</Text>
+
+      {/* Rating */}
+      <View style={{
+        backgroundColor: isTop3 ? `${medalClr}12` : colors.cardElevated,
+        borderRadius: radius.sm, paddingHorizontal: spacing.sm, paddingVertical: 3,
+      }}>
+        <Text style={{ color: medalClr, fontSize: 10, fontWeight: '800' }}>
+          {team.rating} <Text style={{ color: colors.textMuted, fontWeight: '500' }}>rtg</Text>
+        </Text>
+      </View>
     </View>
   );
 }
 
 export function RankingPlayerCard({ player, label }: { player: RankingPlayer; label: string }) {
-  const [imageFailed, setImageFailed] = useState(false);
+  const [photoFailed, setPhotoFailed] = useState(false);
+  const [flagFailed,  setFlagFailed]  = useState(false);
+
+  // Priority: Cricbuzz player photo → country flag → initials
+  const photoUri   = player.imageUrl && !photoFailed ? player.imageUrl : null;
+  const countryUri = !photoUri && !flagFailed ? countryFlagUrl(player.country) : null;
+
   return (
     <View style={{
-      flex: 1, backgroundColor: colors.card, borderRadius: radius.lg,
-      borderWidth: 1, borderColor: colors.border, padding: spacing.md,
+      flex: 1,
+      backgroundColor: colors.card,
+      borderRadius: radius.lg,
+      borderWidth: 1,
+      borderColor: colors.border,
+      padding: spacing.md,
+      gap: spacing.sm,
     }}>
-      <Text style={{ color: colors.textMuted, fontSize: 9, fontWeight: '800', letterSpacing: 0.5, marginBottom: 8 }}>
-        {label.toUpperCase()}
+      {/* Label */}
+      <Text style={{
+        color: colors.textMuted, fontSize: 9,
+        fontWeight: '700', letterSpacing: 1.2, textTransform: 'uppercase',
+      }}>
+        {label}
       </Text>
+
+      {/* Player row */}
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-        {player.imageUrl && !imageFailed ? (
+        {/* Avatar: photo → country flag → initials */}
+        {photoUri ? (
           <Image
-            source={{ uri: player.imageUrl }}
+            source={{ uri: photoUri }}
             style={{ width: 36, height: 36, borderRadius: 18 }}
             resizeMode="cover"
-            onError={() => setImageFailed(true)}
+            onError={() => setPhotoFailed(true)}
+          />
+        ) : countryUri ? (
+          <Image
+            source={{ uri: countryUri }}
+            style={{ width: 36, height: 36, borderRadius: 6 }}
+            resizeMode="contain"
+            onError={() => setFlagFailed(true)}
           />
         ) : (
           <View style={{
             width: 36, height: 36, borderRadius: 18,
-            backgroundColor: colors.accentDim, alignItems: 'center', justifyContent: 'center',
+            backgroundColor: colors.accentDim,
+            alignItems: 'center', justifyContent: 'center',
           }}>
-            <Text style={{ fontSize: 16 }}>{cricketFlag(player.country)}</Text>
+            <Text style={{ color: colors.accent, fontSize: 10, fontWeight: '800' }}>
+              {player.name.slice(0, 2).toUpperCase()}
+            </Text>
           </View>
         )}
-        <View style={{ flex: 1 }}>
-          <Text style={{ color: colors.textPrimary, fontSize: font.xs, fontWeight: '800' }} numberOfLines={1}>{player.name}</Text>
-          <Text style={{ color: colors.textMuted, fontSize: 10, marginTop: 1 }} numberOfLines={1}>{player.country}</Text>
+
+        {/* Name + country */}
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={{
+            color: colors.textPrimary, fontSize: font.xs, fontWeight: '700', lineHeight: 15,
+          }} numberOfLines={1}>
+            {player.name}
+          </Text>
+          <Text style={{
+            color: colors.textMuted, fontSize: 9, marginTop: 1,
+          }} numberOfLines={1}>
+            {player.country}
+          </Text>
         </View>
-        <Text style={{ color: colors.accent, fontSize: font.sm, fontWeight: '900' }}>{player.rating}</Text>
+
+        {/* Rating — hero number */}
+        <Text style={{
+          color: colors.accent, fontSize: font.lg, fontWeight: '900', letterSpacing: -0.5,
+        }}>
+          {player.rating}
+        </Text>
       </View>
     </View>
   );
@@ -1048,22 +1319,16 @@ export function RankingPlayerCard({ player, label }: { player: RankingPlayer; la
 
 // ── Fact Card ─────────────────────────────────────────────────
 
-export function FactCard({ icon, text, color }: { icon: string; text: string; color: string }) {
+export function FactCard({ icon: _icon, text, color }: { icon: string; text: string; color: string }) {
   return (
     <View style={{
       backgroundColor: colors.card, borderRadius: radius.lg,
-      borderWidth: 1, borderColor: color + '30',
-      padding: spacing.md, marginBottom: spacing.sm,
-      flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm,
+      borderWidth: 1, borderColor: colors.border,
+      borderLeftWidth: 3, borderLeftColor: color,
+      paddingHorizontal: spacing.md, paddingVertical: spacing.md,
+      marginBottom: spacing.sm,
     }}>
-      <View style={{
-        width: 34, height: 34, borderRadius: 17,
-        backgroundColor: color + '18', alignItems: 'center', justifyContent: 'center',
-        flexShrink: 0,
-      }}>
-        <Text style={{ fontSize: 18 }}>{icon}</Text>
-      </View>
-      <Text style={{ color: colors.textSecondary, fontSize: font.xs, flex: 1, lineHeight: 18 }}>{text}</Text>
+      <Text style={{ color: colors.textSecondary, fontSize: font.xs, lineHeight: 18 }}>{text}</Text>
     </View>
   );
 }

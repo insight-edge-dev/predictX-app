@@ -1,7 +1,11 @@
 import {
-  View, Text, Modal, Pressable, Animated, Dimensions, Platform,
+  View, Text, Modal, Pressable, Dimensions, Platform,
 } from 'react-native';
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
+import Animated, {
+  useSharedValue, useAnimatedStyle, withSpring, withTiming,
+} from 'react-native-reanimated';
+import { springs, timings } from '@/utils/anim';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -64,23 +68,15 @@ export function SideDrawer({ visible, onClose, onOpenLeague }: Props) {
   const { league } = useLeague();
   const { unreadCount } = useNotificationBadge();
 
-  const slideAnim    = useRef(new Animated.Value(DRAWER_WIDTH)).current;
-  const opacityAnim  = useRef(new Animated.Value(0)).current;
+  const translateX      = useSharedValue(DRAWER_WIDTH);
+  const backdropOpacity = useSharedValue(0);
+
+  const drawerStyle   = useAnimatedStyle(() => ({ transform: [{ translateX: translateX.value }] }));
+  const backdropStyle = useAnimatedStyle(() => ({ opacity: backdropOpacity.value }));
 
   useEffect(() => {
-    Animated.parallel([
-      Animated.spring(slideAnim, {
-        toValue: visible ? 0 : DRAWER_WIDTH,
-        useNativeDriver: true,
-        bounciness: 0,
-        speed: 22,
-      }),
-      Animated.timing(opacityAnim, {
-        toValue: visible ? 1 : 0,
-        duration: 200,
-        useNativeDriver: true,
-      }),
-    ]).start();
+    translateX.value      = withSpring(visible ? 0 : DRAWER_WIDTH, springs.smooth);
+    backdropOpacity.value = withTiming(visible ? 1 : 0, timings.medium);
   }, [visible]);
 
   const navigate = (route: string) => {
@@ -143,18 +139,17 @@ export function SideDrawer({ visible, onClose, onOpenLeague }: Props) {
   return (
     <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
       {/* Backdrop */}
-      <Animated.View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', opacity: opacityAnim }}>
+      <Animated.View style={[{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)' }, backdropStyle]}>
         <Pressable style={{ flex: 1 }} onPress={onClose} />
       </Animated.View>
 
       {/* Drawer */}
-      <Animated.View style={{
+      <Animated.View style={[{
         position: 'absolute', top: 0, bottom: 0, right: 0,
         width: DRAWER_WIDTH,
-        transform: [{ translateX: slideAnim }],
         backgroundColor: colors.card,
         ...drawerShadow,
-      }}>
+      }, drawerStyle]}>
 
         {/* ── Header ── */}
         <LinearGradient

@@ -1,6 +1,7 @@
 import { View, Text, Pressable } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { useRouter } from 'expo-router';
+import { safeBack } from '@/utils/navigation';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -10,6 +11,7 @@ import { supabase } from '@/lib/supabase';
 import { colors, spacing, font, radius } from '@/constants/theme';
 import api from '@/services/api';
 import { useLeague } from '@/contexts/LeagueContext';
+import { PageLoader } from '@/components/PageLoader';
 
 interface ExpertPrediction {
   id:               string;
@@ -190,7 +192,7 @@ export default function OurExpertScreen() {
         borderBottomWidth: 1, borderBottomColor: colors.border,
       }}>
         <Pressable
-          onPress={() => router.back()}
+          onPress={() => safeBack()}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1, marginRight: spacing.md })}
         >
@@ -216,10 +218,10 @@ export default function OurExpertScreen() {
         </View>
       </View>
 
+      <PageLoader show={isLoading && predictions.length === 0} />
       <FlashList
         data={predictions}
         keyExtractor={p => p.id}
-        estimatedItemSize={220}
         renderItem={({ item }) => <PredictionCard item={item} />}
         contentContainerStyle={{ padding: spacing.lg, paddingBottom: 60 }}
         showsVerticalScrollIndicator={false}

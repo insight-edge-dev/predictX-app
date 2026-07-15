@@ -158,8 +158,7 @@ export default function AuthScreen() {
   // Auto-submit once all 6 digits are filled
   useEffect(() => {
     if (otp.length === 6 && step === 'otp' && !loading) handleVerifyOtp();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [otp]);
+  }, [otp, step, loading, handleVerifyOtp]);
 
   const tabAnim = useRef(new Animated.Value(mode === 'login' ? 0 : 1)).current;
 

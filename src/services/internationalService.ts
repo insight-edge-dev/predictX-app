@@ -28,7 +28,9 @@ export async function getInternationalSeries(): Promise<InternationalSeries[]> {
     cacheSet(key, list, TTL);
     return list;
   } catch (e) {
-    console.error('[internationalService] getInternationalSeries error:', (e as Error).message);
+    if ((e as Error).name !== 'AbortError') {
+      console.error('[internationalService] getInternationalSeries error:', (e as Error).message);
+    }
     return [];
   }
 }
@@ -43,11 +45,28 @@ export async function getInternationalSeriesDetail(stageId: string): Promise<Int
     cacheSet(key, data, TTL);
     return data;
   } catch (e) {
-    console.error(`[internationalService] getInternationalSeriesDetail(${stageId}) error:`, (e as Error).message);
+    if ((e as Error).name !== 'AbortError') {
+      console.error(`[internationalService] getInternationalSeriesDetail(${stageId}) error:`, (e as Error).message);
+    }
     return null;
   }
 }
 
 export async function getInternationalMatchTip(matchId: string): Promise<InternationalMatchTip> {
   return api.get<InternationalMatchTip>(`/international/tips/${matchId}`);
+}
+
+export interface IntlScheduleRaw {
+  live:      any[];
+  today:     any[];
+  upcoming:  any[];
+  completed: any[];
+}
+
+export async function getInternationalSchedule(): Promise<IntlScheduleRaw> {
+  try {
+    return await api.get<IntlScheduleRaw>('/international/schedule');
+  } catch (e) {
+    return { live: [], today: [], upcoming: [], completed: [] };
+  }
 }

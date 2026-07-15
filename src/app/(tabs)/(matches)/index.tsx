@@ -42,6 +42,7 @@ import type { FootballMatch } from '@/types/football';
 import { dedupeMatches, type AdaptedMatch } from '@/utils/matchAdapter';
 import { LeagueSwitcher } from '@/components/LeagueSwitcher';
 import { LeaguePickerGate } from '@/components/LeaguePickerGate';
+import { PageLoader } from '@/components/PageLoader';
 import { colors, spacing, font, radius } from '@/constants/theme';
 import { getTeamColor, getTeamLogo } from '@/theme/colors';
 import type { StandingsRow } from '@/services/matchService';
@@ -386,12 +387,12 @@ const LAST5_COLOR: Record<string, string> = {
   N: colors.textMuted,
 };
 
-const TABLE_COLS = [
-  { label: 'M',   key: 'played'  as keyof StandingsRow, width: 28 },
-  { label: 'W',   key: 'wins'    as keyof StandingsRow, width: 28 },
-  { label: 'L',   key: 'losses'  as keyof StandingsRow, width: 28 },
-  { label: 'Pts', key: 'points'  as keyof StandingsRow, width: 36, accent: true },
-] as const;
+const TABLE_COLS: { label: string; key: keyof StandingsRow; width: number; accent?: boolean }[] = [
+  { label: 'M',   key: 'played',  width: 28 },
+  { label: 'W',   key: 'wins',    width: 28 },
+  { label: 'L',   key: 'losses',  width: 28 },
+  { label: 'Pts', key: 'points',  width: 36, accent: true },
+];
 
 function IPLTableView({ rows, isLoading }: { rows: StandingsRow[]; isLoading: boolean }) {
   if (isLoading) {
@@ -1078,6 +1079,7 @@ function FootballMatchesScreen({ initialTab }: { initialTab?: FootballTab | null
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
+      <PageLoader show={isLoading} />
       <SafeAreaView style={{ flex: 1 }}>
         <ScrollView
           showsVerticalScrollIndicator={false}
@@ -1282,7 +1284,7 @@ function CricketMatchesScreen({ initialTab }: { initialTab?: Tab | null } = {}) 
   }, [completedMatches]);
 
   const handleMatchPress = useCallback((id: string) => {
-    router.push(`/(match-details)/${id}`);
+    router.push(`/(match-details)/${id}` as any);
   }, [router]);
 
   const renderItem = useCallback(({ item }: { item: AdaptedMatch }) => (
@@ -1339,9 +1341,8 @@ function CricketMatchesScreen({ initialTab }: { initialTab?: Tab | null } = {}) 
       {/* Tab bar */}
       <TabBar active={tab} onPress={setTab} liveCount={liveCount} tabs={TABS} />
 
-      {/* Loading / Error */}
-      {isLoading && <LoadingState />}
-      {isError   && <ErrorState onRetry={refetch} />}
+      {/* Error */}
+      {isError && <ErrorState onRetry={refetch} />}
 
       {/* ── Live tab content (not list-based) ── */}
       {tab === 'Live' && !isLoading && !isError && (
@@ -1398,6 +1399,7 @@ function CricketMatchesScreen({ initialTab }: { initialTab?: Tab | null } = {}) 
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
+      <PageLoader show={isLoading} />
       <SafeAreaView style={{ flex: 1 }}>
         <SectionList<AdaptedMatch, Section>
           sections={activeSections}
@@ -1458,6 +1460,7 @@ function BackToAllPill({ onPress, label }: { onPress: () => void; label: string 
 // fixtures in <League>" link that jumps to that league's full Matches screen.
 
 const LEAGUE_PREVIEW_COUNT = 3;
+const BILATERAL_IDS = new Set(['T20I', 'WT20I', 'WODI']);
 
 interface LeagueGroup {
   leagueId:    string;
@@ -1825,8 +1828,21 @@ function AllMatchesScreen({ onSeeAllLeague }: { onSeeAllLeague: (leagueId: strin
   const [tab, setTab] = useState<AllMatchesTab>('fixtures');
 
   function goToItem(item: AllMatchItem) {
-    if (item.kind === 'cricket') router.push(`/(match-details)/${item.match.id}`);
-    else router.push(`/(match-details)/${item.match.id}?sport=football` as any);
+    if (item.kind === 'cricket') {
+      if (BILATERAL_IDS.has(item.leagueId)) {
+        // Bilateral series match — route to international series detail if stageId available
+        const stageId = (item.match as any).stageId;
+        if (stageId) router.push(`/(international)/${stageId}` as any);
+        else router.push('/(international)' as any);
+        return;
+      }
+      const league = leagues.find(l => l.id === item.leagueId);
+      const isIntl = league?.country === 'International' || league?.country === 'World';
+      if (!isIntl) router.push(`/(match-details)/${item.match.id}`);
+      // International tournament matches (T20 WC, etc.) have no dedicated detail screen yet
+    } else {
+      router.push(`/(match-details)/${item.match.id}?sport=football` as any);
+    }
   }
 
   function leagueFullName(leagueId: string, fallback: string) {
@@ -1849,6 +1865,7 @@ function AllMatchesScreen({ onSeeAllLeague }: { onSeeAllLeague: (leagueId: strin
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
+      <PageLoader show={isLoading} />
       <SafeAreaView style={{ flex: 1 }}>
         <View style={{ paddingHorizontal: spacing.lg }}>
           <View style={{
@@ -1884,13 +1901,7 @@ function AllMatchesScreen({ onSeeAllLeague }: { onSeeAllLeague: (leagueId: strin
             />
           }
         >
-          {isLoading && isEmpty ? (
-            <>
-              <MatchCardSkeleton />
-              <MatchCardSkeleton />
-              <MatchCardSkeleton />
-            </>
-          ) : isEmpty ? (
+          {isEmpty ? (
             <EmptyCard message="No matches right now — check back soon" />
           ) : tab === 'live' ? (
             live.length === 0 ? (
@@ -1973,8 +1984,13 @@ export default function MatchesScreen() {
   const { hasSelectedLeague, setLeagueId } = useLeague();
   const isFootball = useIsFootball();
   const [initialTab, setInitialTab] = useState<'Fixtures' | 'Results' | null>(null);
+  const router = useRouter();
 
   function goToLeagueTab(leagueId: string, tab: 'Fixtures' | 'Results') {
+    if (BILATERAL_IDS.has(leagueId)) {
+      router.push('/(international)' as any);
+      return;
+    }
     setLeagueId(leagueId);
     setInitialTab(tab);
   }

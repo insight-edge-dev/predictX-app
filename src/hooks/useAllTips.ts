@@ -14,7 +14,8 @@ export interface CricketTipItem  { kind: 'cricket';  leagueId: string; leagueLab
 export interface FootballTipItem { kind: 'football'; leagueId: string; leagueLabel: string; match: FootballMatchWithTip; }
 export type AllTipItem = CricketTipItem | FootballTipItem;
 
-export function useAllTips() {
+export function useAllTips(options?: { enabled?: boolean }) {
+  const enabled = options?.enabled ?? true;
   const { leagues } = useLeague();
 
   // Only the in-season (2026) cricket leagues — mirrors the league picker's curation.
@@ -30,6 +31,7 @@ export function useAllTips() {
       staleTime:            2 * 60_000,
       refetchOnWindowFocus: false,
       retry:                1,
+      enabled,
     })),
   });
 
@@ -56,8 +58,9 @@ export function useAllTips() {
 
     out.sort((a, b) => new Date(a.match.date).getTime() - new Date(b.match.date).getTime());
     return out;
+    // Stable string key — avoids the variable-size spread that violates hook rules
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cricketLeagues, footballTips, ...results.map(r => r.data)]);
+  }, [cricketLeagues, footballTips, results.map(r => r.dataUpdatedAt).join(',')]);
 
   return { items, isLoading };
 }

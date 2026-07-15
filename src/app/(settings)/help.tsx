@@ -3,6 +3,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useState } from "react";
 import { useRouter } from "expo-router";
+import { safeBack } from "@/utils/navigation";
 import { colors, spacing, font, radius } from "@/constants/theme";
 
 // ── FAQ data ──────────────────────────────────────────────────
@@ -61,7 +62,7 @@ function BackBar({ title }: { title: string }) {
       borderBottomWidth: 1, borderBottomColor: colors.border + "50",
     }}>
       <Pressable
-        onPress={() => router.back()}
+        onPress={() => safeBack()}
         style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1, flexDirection: "row", alignItems: "center", marginRight: spacing.md })}
         hitSlop={12}
       >

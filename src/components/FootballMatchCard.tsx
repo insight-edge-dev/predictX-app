@@ -1,29 +1,35 @@
-import { View, Text, Pressable, Animated } from 'react-native';
-import { memo, useRef, useEffect } from 'react';
+import { View, Text, Pressable } from 'react-native';
+import { memo, useEffect } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import * as Haptics from 'expo-haptics';
+import Animated, {
+  useSharedValue, useAnimatedStyle,
+  withRepeat, withSequence, withTiming,
+} from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
 import type { FootballMatch, WCStage } from '@/types/football';
 import { colors, spacing, font, radius } from '@/constants/theme';
 import { PredictionBadge } from '@/components/MatchCard';
 import { TeamCrest } from '@/components/TeamCrest';
+import { usePress } from '@/hooks/usePress';
 
 // ── Pulsing live dot ──────────────────────────────────────────────
 
 function LiveDot({ size = 6 }: { size?: number }) {
-  const opacity = useRef(new Animated.Value(1)).current;
+  const opacity  = useSharedValue(1);
+  const dotStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
 
   useEffect(() => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(opacity, { toValue: 0.2, duration: 600, useNativeDriver: true }),
-        Animated.timing(opacity, { toValue: 1,   duration: 600, useNativeDriver: true }),
-      ])
-    ).start();
+    opacity.value = withRepeat(
+      withSequence(
+        withTiming(0.2, { duration: 600 }),
+        withTiming(1,   { duration: 600 }),
+      ),
+      -1, false
+    );
   }, []);
 
   return (
-    <Animated.View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: colors.live, opacity }} />
+    <Animated.View style={[{ width: size, height: size, borderRadius: size / 2, backgroundColor: colors.live }, dotStyle]} />
   );
 }
 
@@ -69,14 +75,6 @@ function TeamColumn({
   );
 }
 
-// ── Press animation ───────────────────────────────────────────────
-
-function usePressScale() {
-  const scale = useRef(new Animated.Value(1)).current;
-  const onPressIn  = () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); Animated.spring(scale, { toValue: 0.984, useNativeDriver: true, speed: 50, bounciness: 3 }).start(); };
-  const onPressOut = () => { Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 50, bounciness: 3 }).start(); };
-  return { scale, onPressIn, onPressOut };
-}
 
 // ── FootballMatchCard ─────────────────────────────────────────────
 
@@ -91,7 +89,7 @@ export const FootballMatchCard = memo(function FootballMatchCard({
   predictionResult?:       'correct' | 'wrong' | null;
   expertPredictionResult?: 'correct' | 'wrong' | null;
 }) {
-  const { scale, onPressIn, onPressOut } = usePressScale();
+  const press = usePress(0.984);
   const router = useRouter();
 
   const isLive      = match.status === 'live';
@@ -114,19 +112,18 @@ export const FootballMatchCard = memo(function FootballMatchCard({
   return (
     <Pressable
       onPress={() => onPress ? onPress(match.id) : router.push(`/(match-details)/${match.id}?sport=football` as any)}
-      onPressIn={onPressIn}
-      onPressOut={onPressOut}
+      onPressIn={press.onPressIn}
+      onPressOut={press.onPressOut}
     >
       <Animated.View
-        style={{
-          transform: [{ scale }],
+        style={[{
           marginBottom: spacing.sm,
           shadowColor: '#000',
           shadowOffset: { width: 0, height: 1 },
           shadowOpacity: 0.05,
           shadowRadius: 3,
           elevation: 1,
-        }}
+        }, press.style]}
       >
         <View
           style={{

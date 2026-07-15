@@ -70,6 +70,8 @@ export interface AdaptedMatch {
   seriesName:   string;
   seriesId:     string | null;
 
+  matchType?:   string;
+
   // Set only when a match has been aggregated across multiple leagues
   // (e.g. the cross-league Discovery feed) so cards can label it correctly.
   leagueLabel?: string;

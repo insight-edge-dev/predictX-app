@@ -8,6 +8,7 @@ import { useQueries } from '@tanstack/react-query';
 import { getLeagueMatches } from '@/services/matchService';
 import { adaptMatches, type AdaptedMatch } from '@/utils/matchAdapter';
 import { useFootballMatches } from '@/hooks/useFootballMatches';
+import { useInternationalSchedule } from '@/hooks/useInternational';
 import { useLeague } from '@/contexts/LeagueContext';
 import type { FootballMatch } from '@/types/football';
 
@@ -34,9 +35,10 @@ export function useAllMatches() {
 
   const results = useQueries({
     queries: cricketLeagues.map((l) => ({
-      queryKey:             [`${l.id}:matches`],
+      queryKey:             [`homefeed:cricket:${l.id}`],
       queryFn:              () => getLeagueMatches(l.id, false),
       staleTime:            30_000,
+      refetchInterval:      30_000,
       refetchOnWindowFocus: false,
       retry:                0,
     })),
@@ -46,6 +48,8 @@ export function useAllMatches() {
     liveMatches: fbLive, upcomingMatches: fbUpcoming, completedMatches: fbCompleted,
     isLoading: fbLoading, isRefetching: fbRefetching, refetch: fbRefetch,
   } = useFootballMatches();
+
+  const { data: intlSchedule } = useInternationalSchedule();
 
   const queryData = results.map(r => r.data);
   const isLoading = results.some(r => r.isLoading) || fbLoading;
@@ -68,13 +72,20 @@ export function useAllMatches() {
     fbUpcoming.forEach(match  => upcoming.push({ kind: 'football', leagueId: fbLeague, leagueLabel: 'WC 2026', match }));
     fbCompleted.forEach(match => completed.push({ kind: 'football', leagueId: fbLeague, leagueLabel: 'WC 2026', match }));
 
+    // International bilateral series (T20I, WT20I, WODI — all buckets)
+    const intlItem = (m: any) => ({ kind: 'cricket' as const, leagueId: m.leagueLabel ?? 'T20I', leagueLabel: m.leagueLabel ?? 'T20I', match: m });
+    (intlSchedule?.live      ?? []).forEach(m => live.push(intlItem(m)));
+    (intlSchedule?.today     ?? []).forEach(m => upcoming.push(intlItem(m)));
+    (intlSchedule?.upcoming  ?? []).forEach(m => upcoming.push(intlItem(m)));
+    (intlSchedule?.completed ?? []).forEach(m => completed.push(intlItem(m)));
+
     return {
       live:      sortByDate(live, 'asc'),
       upcoming:  sortByDate(upcoming, 'asc'),
       completed: sortByDate(completed, 'desc'),
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cricketLeagues, fbLive, fbUpcoming, fbCompleted, ...queryData]);
+  }, [cricketLeagues, fbLive, fbUpcoming, fbCompleted, intlSchedule, ...queryData]);
 
   return {
     live, upcoming, completed,

@@ -49,15 +49,16 @@ export interface ManOfMatch {
 }
 
 export type InternationalMatch = Match & {
-  tip:         LightTip | null;
-  overs1?:     string | null;
-  overs2?:     string | null;
-  statusText?: string;
-  toss?:       MatchToss | null;
-  winner?:     string | null;
-  manOfMatch?: ManOfMatch | null;
-  batsmen?:    LiveBatsman[];
-  bowlers?:    LiveBowler[];
+  tip:          LightTip | null;
+  overs1?:      string | null;
+  overs2?:      string | null;
+  statusText?:  string;
+  toss?:        MatchToss | null;
+  winner?:      string | null;
+  manOfMatch?:  ManOfMatch | null;
+  batsmen?:     LiveBatsman[];
+  bowlers?:     LiveBowler[];
+  isCompleted?: boolean;
 };
 
 export interface InternationalSeriesDetail {

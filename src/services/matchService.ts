@@ -200,9 +200,9 @@ let inflightTable:    Promise<StandingsRow[]> | null = null;
 // Per-slug in-flight deduplication and 60 s cache.
 
 const leagueMatchCache: Record<string, { data: MatchData; at: number }> = {};
-const inflightLeagueMatches: Record<string, Promise<MatchData>>         = {};
-const inflightLeagueFixtures: Record<string, Promise<Match[]>>          = {};
-const inflightLeagueTables: Record<string, Promise<StandingsRow[]>>     = {};
+const inflightLeagueMatches:  Record<string, Promise<MatchData>      | undefined> = {};
+const inflightLeagueFixtures: Record<string, Promise<Match[]>         | undefined> = {};
+const inflightLeagueTables:   Record<string, Promise<StandingsRow[]>  | undefined> = {};
 
 export async function getLeagueMatches(
   slug:         string,
@@ -210,7 +210,7 @@ export async function getLeagueMatches(
 ): Promise<MatchData> {
   const cached = leagueMatchCache[slug];
   if (!forceRefresh && cached && Date.now() - cached.at < TTL_MATCHES) return cached.data;
-  if (inflightLeagueMatches[slug]) return inflightLeagueMatches[slug];
+  if (inflightLeagueMatches[slug]) return inflightLeagueMatches[slug]!;
 
   inflightLeagueMatches[slug] = fetchWithRetry(
     `getLeagueMatches(${slug})`,
@@ -227,7 +227,7 @@ export async function getLeagueMatches(
     leagueMatchCache[slug]?.data ?? EMPTY,
   ).finally(() => { delete inflightLeagueMatches[slug]; });
 
-  return inflightLeagueMatches[slug];
+  return inflightLeagueMatches[slug]!;
 }
 
 export function invalidateLeagueCache(slug: string): void {
@@ -241,7 +241,7 @@ export async function getLeagueFixtures(slug: string): Promise<Match[]> {
   const cacheKey = `league:fixtures:${slug}`;
   const cached   = cacheGet<Match[]>(cacheKey);
   if (cached) return cached;
-  if (inflightLeagueFixtures[slug]) return inflightLeagueFixtures[slug];
+  if (inflightLeagueFixtures[slug]) return inflightLeagueFixtures[slug]!;
 
   inflightLeagueFixtures[slug] = fetchWithRetry(
     `getLeagueFixtures(${slug})`,
@@ -254,7 +254,7 @@ export async function getLeagueFixtures(slug: string): Promise<Match[]> {
     cacheGet<Match[]>(cacheKey) ?? [],
   ).finally(() => { delete inflightLeagueFixtures[slug]; });
 
-  return inflightLeagueFixtures[slug];
+  return inflightLeagueFixtures[slug]!;
 }
 
 // ── getLeagueTable ────────────────────────────────────────────
@@ -264,7 +264,7 @@ export async function getLeagueTable(slug: string): Promise<StandingsRow[]> {
   const cacheKey = `league:table:${slug}`;
   const cached   = cacheGet<StandingsRow[]>(cacheKey);
   if (cached) return cached;
-  if (inflightLeagueTables[slug]) return inflightLeagueTables[slug];
+  if (inflightLeagueTables[slug]) return inflightLeagueTables[slug]!;
 
   inflightLeagueTables[slug] = fetchWithRetry(
     `getLeagueTable(${slug})`,
@@ -277,7 +277,7 @@ export async function getLeagueTable(slug: string): Promise<StandingsRow[]> {
     cacheGet<StandingsRow[]>(cacheKey) ?? [],
   ).finally(() => { delete inflightLeagueTables[slug]; });
 
-  return inflightLeagueTables[slug];
+  return inflightLeagueTables[slug]!;
 }
 
 // ── getIPLMatches ─────────────────────────────────────────────

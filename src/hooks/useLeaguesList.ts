@@ -24,6 +24,9 @@ export function useLeaguesList() {
         country:  l.country ?? '',
         format:   l.format  ?? 'T20',
         image:    l.image,
+        sport:    (l.sport  ?? 'cricket') as 'cricket' | 'football',
+        status:   l.status  as 'active' | 'completed' | undefined,
+        priority: l.priority,
       }));
     },
     staleTime:            60 * 60_000,

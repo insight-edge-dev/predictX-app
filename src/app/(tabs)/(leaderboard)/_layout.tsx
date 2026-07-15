@@ -1,5 +1,5 @@
 import { Stack } from 'expo-router';
 
-export default function LeagueHomeLayout() {
+export default function LeaderboardLayout() {
   return <Stack screenOptions={{ headerShown: false }} />;
 }

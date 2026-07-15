@@ -31,6 +31,7 @@ export interface Match {
   score2?: string;
   matchDesc?: string;
   matchStage?: MatchStage;
+  matchType?: string;
 }
 
 // ── Legacy detail (kept for backward compat) ─────────────────

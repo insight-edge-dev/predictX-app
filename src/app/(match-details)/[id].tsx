@@ -17,23 +17,30 @@ import {
   ScrollView,
   Image,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { safeBack } from '@/utils/navigation';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
 import { useFullMatch } from '@/hooks/useMatches';
 import { usePredictions, findPrediction, type PlayerPrediction, type MatchPredictions } from '@/hooks/usePredictions';
-import { useTipsList } from '@/hooks/useTips';
+import { getMatchTip, type TipResponse } from '@/services/tipsService';
 import { useLineup, type LineupPlayer } from '@/hooks/useLineup';
 import { useOvers, type Over, type Delivery } from '@/hooks/useOvers';
 import { useFootballMatchDetail } from '@/hooks/useFootballMatches';
 import { useFootballMatchTip } from '@/hooks/useFootballTips';
-import { useIsFootball } from '@/contexts/LeagueContext';
+import { useUserPrediction, usePredictionPoll, type PredictedWinner } from '@/hooks/useUserPrediction';
+import { useAuth } from '@/contexts/AuthContext';
 import { FootballProbabilityBar } from '@/components/FootballProbabilityBar';
 import { TeamCrest } from '@/components/TeamCrest';
+import { CommentSection, CommentInputBar } from '@/components/comments/CommentSection';
+import { UserPredictionCard } from '@/components/predictions/UserPredictionCard';
+import { PredictionPoll } from '@/components/predictions/PredictionPoll';
 import { type FullMatch } from '@/services/matchService';
 import type { FootballMatch } from '@/types/football';
 import { colors, spacing, font, radius } from '@/constants/theme';
@@ -58,7 +65,7 @@ type RawFull = FullMatch & {
 
 // ── Tabs ──────────────────────────────────────────────────────
 
-const TABS = ['Scorecard', 'Overview', 'Squad', 'XI', 'Commentary'] as const;
+const TABS = ['Scorecard', 'Overview', 'Predict', 'Squad', 'XI', 'Commentary'] as const;
 type Tab = (typeof TABS)[number];
 
 // ── Helpers ───────────────────────────────────────────────────
@@ -1315,65 +1322,184 @@ function OverviewTab({ raw }: { raw: RawFull }) {
   const stage      = raw.matchStage && raw.matchStage !== 'LEAGUE' ? raw.matchStage : '';
   const series     = raw.seriesName ?? raw.series ?? '';
   const statusText = raw.statusText ?? '';
-  const tossLine   = toss?.winner ? `${toss.winner} won and chose to ${toss.decision || 'bat'}` : '';
+  const tossLine   = toss?.winner ? `${toss.winner} won the toss · elected to ${toss.decision || 'bat'}` : '';
   const officials  = raw.officials;
   const motm       = raw.manOfMatch;
+  const isCompleted = raw.status === 'completed';
 
   return (
-    <View style={{ padding: spacing.lg }}>
-      {/* Man of the match */}
-      {motm?.name && (
-        <View
-          style={{
-            backgroundColor: colors.card, borderRadius: radius.md,
-            borderWidth: 1, borderColor: '#FDE68A',
-            padding: spacing.lg, marginBottom: spacing.md,
-            flexDirection: 'row', alignItems: 'center', gap: spacing.md,
-          }}
-        >
-          <View style={{ width: 3, height: 40, backgroundColor: '#F59E0B', borderRadius: 2 }} />
-          <View style={{ flex: 1 }}>
-            <Text style={{ color: colors.textMuted, fontSize: font.xs, fontWeight: '600', letterSpacing: 0.8, marginBottom: 4 }}>
-              MAN OF THE MATCH
-            </Text>
-            <Text style={{ color: colors.textPrimary, fontSize: font.base, fontWeight: '800' }}>
-              {motm.name}
-            </Text>
-            <Text style={{ color: colors.textSecondary, fontSize: font.xs, marginTop: 2 }}>{motm.role}</Text>
-          </View>
-          <Ionicons name="trophy" size={24} color="#F59E0B" />
+    <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.lg, gap: spacing.md }}>
+
+      {/* ── Series header — no card border, just type hierarchy ── */}
+      <View style={{ gap: 8 }}>
+        {!!series && (
+          <Text style={{ color: colors.textPrimary, fontSize: font.md, fontWeight: '700', lineHeight: 20 }}>
+            {series}
+          </Text>
+        )}
+        <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+          {!!stage && (
+            <View style={{ backgroundColor: colors.accent, borderRadius: radius.sm, paddingHorizontal: 9, paddingVertical: 3 }}>
+              <Text style={{ color: '#fff', fontSize: font.xs, fontWeight: '800', letterSpacing: 0.4 }}>{stage}</Text>
+            </View>
+          )}
+          {!!raw.matchType && (
+            <View style={{ backgroundColor: colors.cardElevated, borderRadius: radius.sm, paddingHorizontal: 9, paddingVertical: 3 }}>
+              <Text style={{ color: colors.textSecondary, fontSize: font.xs, fontWeight: '700' }}>
+                {raw.matchType.toUpperCase()}
+              </Text>
+            </View>
+          )}
+          {!!raw.matchDesc && (
+            <Text style={{ color: colors.textMuted, fontSize: font.xs, fontWeight: '500' }}>{raw.matchDesc}</Text>
+          )}
+        </View>
+      </View>
+
+      {/* ── 2×2 fact grid — cardElevated bg, no border, icon anchors ── */}
+      <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+        {/* Column 1 */}
+        <View style={{ flex: 1.1, gap: spacing.sm }}>
+          {!!raw.venue && (
+            <View style={{ backgroundColor: colors.cardElevated, borderRadius: radius.xl, padding: spacing.md }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 7 }}>
+                <Ionicons name="location-outline" size={12} color={colors.accent} />
+                <Text style={{ color: colors.textMuted, fontSize: 10, fontWeight: '700', letterSpacing: 0.6 }}>VENUE</Text>
+              </View>
+              <Text style={{ color: colors.textPrimary, fontSize: font.sm, fontWeight: '700', lineHeight: 17 }} numberOfLines={2}>
+                {raw.venue}
+              </Text>
+            </View>
+          )}
+          {!!raw.time && (
+            <View style={{ backgroundColor: colors.cardElevated, borderRadius: radius.xl, padding: spacing.md }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 7 }}>
+                <Ionicons name="time-outline" size={12} color={colors.accent} />
+                <Text style={{ color: colors.textMuted, fontSize: 10, fontWeight: '700', letterSpacing: 0.6 }}>KICKOFF</Text>
+              </View>
+              <Text style={{ color: colors.textPrimary, fontSize: font.sm, fontWeight: '700' }}>{raw.time}</Text>
+            </View>
+          )}
+        </View>
+        {/* Column 2 */}
+        <View style={{ flex: 1, gap: spacing.sm }}>
+          {!!raw.date && (
+            <View style={{ backgroundColor: colors.cardElevated, borderRadius: radius.xl, padding: spacing.md }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 7 }}>
+                <Ionicons name="calendar-outline" size={12} color={colors.accent} />
+                <Text style={{ color: colors.textMuted, fontSize: 10, fontWeight: '700', letterSpacing: 0.6 }}>DATE</Text>
+              </View>
+              <Text style={{ color: colors.textPrimary, fontSize: font.sm, fontWeight: '700' }}>{formatMatchDate(raw.date)}</Text>
+            </View>
+          )}
+          {!!raw.matchType && (
+            <View style={{ backgroundColor: colors.cardElevated, borderRadius: radius.xl, padding: spacing.md }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 7 }}>
+                <Ionicons name="stats-chart-outline" size={12} color={colors.accent} />
+                <Text style={{ color: colors.textMuted, fontSize: 10, fontWeight: '700', letterSpacing: 0.6 }}>FORMAT</Text>
+              </View>
+              <Text style={{ color: colors.textPrimary, fontSize: font.sm, fontWeight: '700' }}>{raw.matchType.toUpperCase()}</Text>
+            </View>
+          )}
+        </View>
+      </View>
+
+      {/* ── Status + toss strip — accent left border ── */}
+      {(!!statusText || !!tossLine) && (
+        <View style={{ borderRadius: radius.xl, overflow: 'hidden' }}>
+          {!!statusText && (
+            <View style={{
+              flexDirection: 'row', alignItems: 'center', gap: 10,
+              paddingHorizontal: spacing.md, paddingVertical: 11,
+              borderLeftWidth: 3,
+              borderLeftColor: isCompleted ? colors.success : colors.accent,
+              backgroundColor: isCompleted ? colors.successDim : colors.accentDim,
+              borderBottomWidth: tossLine ? 1 : 0,
+              borderBottomColor: isCompleted ? `${colors.success}25` : `${colors.accent}25`,
+            }}>
+              <Ionicons
+                name={isCompleted ? 'checkmark-circle-outline' : 'time-outline'}
+                size={14}
+                color={isCompleted ? colors.success : colors.accent}
+              />
+              <Text style={{
+                color: isCompleted ? colors.success : colors.accent,
+                fontSize: font.xs, fontWeight: '700', flex: 1, lineHeight: 16,
+              }}>
+                {statusText}
+              </Text>
+            </View>
+          )}
+          {!!tossLine && (
+            <View style={{
+              flexDirection: 'row', alignItems: 'center', gap: 10,
+              paddingHorizontal: spacing.md, paddingVertical: 10,
+              backgroundColor: colors.cardElevated,
+              borderLeftWidth: 3, borderLeftColor: colors.border,
+            }}>
+              <Ionicons name="shuffle-outline" size={13} color={colors.textMuted} />
+              <Text style={{ color: colors.textSecondary, fontSize: font.xs, flex: 1 }}>{tossLine}</Text>
+            </View>
+          )}
         </View>
       )}
 
-      <SectionCard title="MATCH INFO">
-        <InfoRow label="Series"  value={series} />
-        <InfoRow label="Format"  value={raw.matchType ? raw.matchType.toUpperCase() : 'T20'} />
-        <InfoRow label="Stage"   value={stage} valueColor={colors.accent} />
-        <InfoRow label="Match"   value={raw.matchDesc ?? ''} />
-      </SectionCard>
-
-      <SectionCard title="VENUE & SCHEDULE">
-        <InfoRow label="Venue" value={raw.venue ?? ''} />
-        <InfoRow label="Date"  value={raw.date ? formatMatchDate(raw.date) : ''} />
-        <InfoRow label="Time"  value={raw.time ?? ''} />
-      </SectionCard>
-
-      <SectionCard title="MATCH DETAILS">
-        <InfoRow label="Toss"   value={tossLine} />
-        <InfoRow label="Status" value={statusText} />
-        {raw.status === 'completed' && statusText && (
-          <InfoRow label="Result" value={statusText} valueColor={colors.success} />
-        )}
-      </SectionCard>
-
-      {/* Officials */}
-      {(officials?.umpire1 || officials?.umpire2 || officials?.tvUmpire) && (
-        <SectionCard title="OFFICIALS">
-          {officials.umpire1 && <InfoRow label="Umpire 1" value={officials.umpire1} />}
-          {officials.umpire2 && <InfoRow label="Umpire 2" value={officials.umpire2} />}
-          {officials.tvUmpire && <InfoRow label="TV Umpire" value={officials.tvUmpire} />}
-        </SectionCard>
+      {/* ── Man of the Match — warm gold card ── */}
+      {!!motm?.name && (
+        <View style={{
+          backgroundColor: '#FFFBEB', borderRadius: radius.xl,
+          borderWidth: 1, borderColor: '#FDE68A',
+          padding: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.md,
+        }}>
+          <View style={{
+            width: 40, height: 40, borderRadius: 20,
+            backgroundColor: '#FEF3C7',
+            alignItems: 'center', justifyContent: 'center',
+          }}>
+            <Ionicons name="trophy" size={20} color="#D97706" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: '#92400E', fontSize: 10, fontWeight: '800', letterSpacing: 0.8, marginBottom: 3 }}>
+              PLAYER OF THE MATCH
+            </Text>
+            <Text style={{ color: '#78350F', fontSize: font.base, fontWeight: '800' }}>{motm.name}</Text>
+            {!!motm.role && (
+              <Text style={{ color: '#B45309', fontSize: font.xs, marginTop: 2 }}>{motm.role}</Text>
+            )}
+          </View>
+        </View>
       )}
+
+      {/* ── Officials — borderless, icon-led ── */}
+      {(officials?.umpire1 || officials?.umpire2 || officials?.tvUmpire) && (
+        <View style={{ backgroundColor: colors.cardElevated, borderRadius: radius.xl, padding: spacing.md }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 10 }}>
+            <Ionicons name="eye-outline" size={12} color={colors.textMuted} />
+            <Text style={{ color: colors.textMuted, fontSize: 10, fontWeight: '700', letterSpacing: 0.6 }}>OFFICIALS</Text>
+          </View>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
+            {officials.umpire1 && (
+              <View style={{ flex: 1, minWidth: '44%' }}>
+                <Text style={{ color: colors.textMuted, fontSize: 10, marginBottom: 2 }}>On-Field</Text>
+                <Text style={{ color: colors.textSecondary, fontSize: font.xs, fontWeight: '600' }}>{officials.umpire1}</Text>
+              </View>
+            )}
+            {officials.umpire2 && (
+              <View style={{ flex: 1, minWidth: '44%' }}>
+                <Text style={{ color: colors.textMuted, fontSize: 10, marginBottom: 2 }}>On-Field</Text>
+                <Text style={{ color: colors.textSecondary, fontSize: font.xs, fontWeight: '600' }}>{officials.umpire2}</Text>
+              </View>
+            )}
+            {officials.tvUmpire && (
+              <View style={{ width: '100%', marginTop: 4 }}>
+                <Text style={{ color: colors.textMuted, fontSize: 10, marginBottom: 2 }}>TV Umpire</Text>
+                <Text style={{ color: colors.textSecondary, fontSize: font.xs, fontWeight: '600' }}>{officials.tvUmpire}</Text>
+              </View>
+            )}
+          </View>
+        </View>
+      )}
+
     </View>
   );
 }
@@ -1629,9 +1755,10 @@ function CricketMatchDetailScreen() {
   const router  = useRouter();
   // Default to Squad tab for upcoming matches (no scorecard available yet)
   const [activeTab, setActiveTab]         = useState<Tab>('Scorecard');
-  // Will be updated once match status is known
   const [activeInnings, setActiveInnings] = useState(0);
   const [inningsInitialized, setInningsInitialized] = useState(false);
+
+  const { user, profile, isAuthenticated } = useAuth();
 
   const {
     data: match, isLoading, isError, isRefetching, refetch,
@@ -1639,9 +1766,16 @@ function CricketMatchDetailScreen() {
 
   const isLiveMatch = match?.status === 'live';
 
-  const { data: predictions }          = usePredictions(id ?? '');
-  const { data: tips = [] }            = useTipsList();
-  const { data: lineupData }           = useLineup(id ?? '');
+  const { data: predictions }   = usePredictions(id ?? '');
+  const { data: matchTipData }  = useQuery<TipResponse>({
+    queryKey:             ['tips:match:detail', id],
+    queryFn:              () => getMatchTip(id ?? ''),
+    enabled:              !!id,
+    staleTime:            30 * 60_000,
+    refetchOnWindowFocus: false,
+    retry:                1,
+  });
+  const { data: lineupData }    = useLineup(id ?? '');
   const { data: oversData }            = useOvers(id ?? '', isLiveMatch);
   const { data: expertPredictions = [] } = useQuery<{ id: string; match_id: string | null; predicted_winner: string; confidence: string; analysis: string }[]>({
     queryKey: ['expert-predictions'],
@@ -1649,13 +1783,28 @@ function CricketMatchDetailScreen() {
     staleTime: 0, refetchOnMount: true,
   });
 
+  const { query: userPredQuery, submit: submitPred, change: changePred } = useUserPrediction(id ?? '', isAuthenticated);
+  const { data: poll } = usePredictionPoll(id ?? '');
+
+  useEffect(() => {
+    if (inningsInitialized || !match) return;
+    const raw = match as RawFull;
+    if (raw.scorecard && raw.scorecard.length > 0) {
+      setActiveInnings(raw.scorecard.length - 1);
+      setInningsInitialized(true);
+    } else if (raw.status === 'upcoming') {
+      setActiveTab('Predict');
+      setInningsInitialized(true);
+    }
+  }, [match, inningsInitialized]);
+
   const BackButton = (
     <View style={{
       flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
       paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, backgroundColor: colors.bg,
     }}>
       <Pressable
-        onPress={() => router.back()}
+        onPress={() => safeBack()}
         style={({ pressed }) => ({
           opacity: pressed ? 0.7 : 1, flexDirection: 'row', alignItems: 'center', padding: spacing.xs,
         })}
@@ -1714,27 +1863,21 @@ function CricketMatchDetailScreen() {
   const isLive    = raw.status === 'live';
   const isUpcoming = raw.status === 'upcoming';
 
-  // Auto-select latest innings on first load for live/completed
-  if (!inningsInitialized && raw.scorecard && raw.scorecard.length > 0) {
-    setActiveInnings(raw.scorecard.length - 1);
-    setInningsInitialized(true);
-  }
-
-  // Auto-switch to Squad tab for upcoming matches (no scorecard yet)
-  if (!inningsInitialized && isUpcoming && activeTab === 'Scorecard') {
-    setActiveTab('Squad');
-    setInningsInitialized(true);
-  }
-
   // Combine both teams' prediction players for scorecard matching
   const allPredPlayers = [
     ...(predictions?.team1 ?? []),
     ...(predictions?.team2 ?? []),
   ];
 
+  const matchEnded = raw.status === 'completed';
+  const teamAName  = raw.team1?.name ?? raw.team1?.shortName ?? 'Team A';
+  const teamBName  = raw.team2?.name ?? raw.team2?.shortName ?? 'Team B';
+  const expertPick = expertPredictions.find(p => p.match_id && String(p.match_id) === String(id));
+  const aiTip      = matchTipData?.tip ?? null;
+
   // Content per tab
   const TabContent = (
-    <View style={{ minHeight: 500, backgroundColor: colors.bg }}>
+    <View style={{ backgroundColor: colors.bg }}>
 
       {/* ── Scorecard ─────────────────────────────────── */}
       {activeTab === 'Scorecard' && (
@@ -1882,44 +2025,135 @@ function CricketMatchDetailScreen() {
         </View>
       )}
 
-      {/* ── Expert + PredictX (completed matches) ── */}
-      {activeTab === 'Scorecard' && raw.status === 'completed' && (() => {
-        const expertPick = expertPredictions.find(p => p.match_id && String(p.match_id) === String(id));
-        const aiPick     = tips.find(t => String(t.id) === String(id));
-        if (!expertPick && !aiPick) return null;
-        return (
-          <View style={{ paddingHorizontal: spacing.md, paddingBottom: spacing.lg }}>
-            <Text style={{ color: colors.textMuted, fontSize: 9, fontWeight: '800', letterSpacing: 1.5, marginBottom: spacing.sm }}>MATCH PREDICTIONS</Text>
-            <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-              {expertPick && (
-                <View style={{ flex: 1, backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.md, borderWidth: 1, borderColor: colors.border }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 6 }}>
-                    <Ionicons name="person-outline" size={10} color={colors.textSecondary} />
-                    <Text style={{ color: colors.textSecondary, fontSize: 9, fontWeight: '700', letterSpacing: 0.8 }}>EXPERT PICK</Text>
-                  </View>
-                  <Text style={{ color: colors.textPrimary, fontSize: font.sm, fontWeight: '800', marginBottom: 4 }}>{expertPick.predicted_winner}</Text>
-                  <Text style={{ color: colors.textMuted, fontSize: 9 }}>{expertPick.confidence} CONFIDENCE</Text>
-                  {expertPick.analysis ? (
-                    <Text style={{ color: colors.textSecondary, fontSize: 10, lineHeight: 15, marginTop: 6 }} numberOfLines={3}>{expertPick.analysis}</Text>
-                  ) : null}
-                </View>
-              )}
-              {aiPick?.tip?.winner && (
-                <View style={{ flex: 1, backgroundColor: colors.accentDim, borderRadius: radius.md, padding: spacing.md, borderWidth: 1, borderColor: colors.accent + '30' }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 6 }}>
-                    <Ionicons name="flash-outline" size={10} color={colors.accent} />
-                    <Text style={{ color: colors.accent, fontSize: 9, fontWeight: '700', letterSpacing: 0.8 }}>PREDICTX</Text>
-                  </View>
-                  <Text style={{ color: colors.accent, fontSize: font.sm, fontWeight: '800' }}>{aiPick.tip.winner}</Text>
-                </View>
-              )}
-            </View>
-          </View>
-        );
-      })()}
-
       {/* ── Overview ──────────────────────────────────── */}
       {activeTab === 'Overview' && <OverviewTab raw={raw} />}
+
+      {/* ── Predict ───────────────────────────────────── */}
+      {activeTab === 'Predict' && (
+        <View style={{ paddingVertical: spacing.md }}>
+
+          {/* PredictX AI insight */}
+          {aiTip?.winner ? (
+            <View style={{
+              marginHorizontal: spacing.lg, marginBottom: spacing.md,
+              backgroundColor: colors.accentDim, borderRadius: radius.xl,
+              padding: spacing.lg, borderWidth: 1, borderColor: colors.accent + '30',
+            }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.sm }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Ionicons name="flash" size={13} color={colors.accent} />
+                  <Text style={{ color: colors.accent, fontSize: 10, fontWeight: '800', letterSpacing: 0.8 }}>
+                    PREDICTX INSIGHT
+                  </Text>
+                </View>
+                <View style={{ backgroundColor: colors.accent + '20', borderRadius: radius.sm, paddingHorizontal: 8, paddingVertical: 3 }}>
+                  <Text style={{ color: colors.accent, fontSize: 9, fontWeight: '800', letterSpacing: 0.5 }}>
+                    {aiTip.confidenceLabel} CONFIDENCE
+                  </Text>
+                </View>
+              </View>
+              <Text style={{ color: colors.textPrimary, fontSize: font.xl, fontWeight: '800', marginBottom: spacing.md }}>
+                {aiTip.winner}
+              </Text>
+              {/* Win probability bar */}
+              <View style={{ gap: 6 }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                  <Text style={{ color: colors.textSecondary, fontSize: font.xs, fontWeight: '700' }} numberOfLines={1}>
+                    {teamAName}
+                  </Text>
+                  <Text style={{ color: colors.textSecondary, fontSize: font.xs, fontWeight: '700' }} numberOfLines={1}>
+                    {teamBName}
+                  </Text>
+                </View>
+                <View style={{ height: 6, borderRadius: 3, backgroundColor: colors.live + '30', overflow: 'hidden' }}>
+                  <View style={{ height: 6, borderRadius: 3, width: `${aiTip.team1Pct}%` as any, backgroundColor: colors.accent }} />
+                </View>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                  <Text style={{ color: colors.accent, fontSize: font.xs, fontWeight: '800' }}>{aiTip.team1Pct}%</Text>
+                  <Text style={{ color: colors.live, fontSize: font.xs, fontWeight: '800' }}>{aiTip.team2Pct}%</Text>
+                </View>
+              </View>
+            </View>
+          ) : (
+            <View style={{
+              marginHorizontal: spacing.lg, marginBottom: spacing.md,
+              backgroundColor: colors.cardElevated, borderRadius: radius.xl, padding: spacing.lg,
+            }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                <Ionicons name="flash-outline" size={13} color={colors.textMuted} />
+                <Text style={{ color: colors.textMuted, fontSize: 10, fontWeight: '800', letterSpacing: 0.8 }}>PREDICTX INSIGHT</Text>
+              </View>
+              <Text style={{ color: colors.textMuted, fontSize: font.sm }}>
+                AI prediction not yet available for this match
+              </Text>
+            </View>
+          )}
+
+          {/* Expert pick */}
+          {expertPick && (
+            <View style={{
+              marginHorizontal: spacing.lg, marginBottom: spacing.md,
+              backgroundColor: colors.card, borderRadius: radius.xl,
+              padding: spacing.lg, borderWidth: 1, borderColor: colors.border,
+            }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: spacing.sm }}>
+                <Ionicons name="person-circle-outline" size={14} color={colors.textSecondary} />
+                <Text style={{ color: colors.textSecondary, fontSize: 10, fontWeight: '800', letterSpacing: 0.8 }}>
+                  EXPERT PICK
+                </Text>
+              </View>
+              <Text style={{ color: colors.textPrimary, fontSize: font.lg, fontWeight: '800', marginBottom: 6 }}>
+                {expertPick.predicted_winner}
+              </Text>
+              <View style={{ backgroundColor: colors.cardElevated, borderRadius: radius.sm, paddingHorizontal: 8, paddingVertical: 3, alignSelf: 'flex-start', marginBottom: expertPick.analysis ? spacing.sm : 0 }}>
+                <Text style={{ color: colors.textSecondary, fontSize: 9, fontWeight: '800', letterSpacing: 0.5 }}>
+                  {expertPick.confidence} CONFIDENCE
+                </Text>
+              </View>
+              {expertPick.analysis ? (
+                <Text style={{ color: colors.textSecondary, fontSize: font.xs, lineHeight: 17, marginTop: 4 }}>
+                  {expertPick.analysis}
+                </Text>
+              ) : null}
+            </View>
+          )}
+
+          {/* Your prediction */}
+          <UserPredictionCard
+            teamA={teamAName}
+            teamB={teamBName}
+            prediction={userPredQuery.data ?? null}
+            isLoading={userPredQuery.isLoading}
+            isSubmitting={submitPred.isPending || changePred.isPending}
+            matchEnded={matchEnded}
+            onSubmit={(winner: PredictedWinner) => {
+              const w = winner === 'teamA' ? teamAName : winner === 'teamB' ? teamBName : 'draw';
+              submitPred.mutate({
+                predictedWinner: w, teamA: teamAName, teamB: teamBName,
+                sport: 'cricket',
+                displayName: profile?.displayName ?? user?.displayName ?? 'User',
+              });
+            }}
+            onChange={(winner: PredictedWinner) => {
+              const w = winner === 'teamA' ? teamAName : winner === 'teamB' ? teamBName : 'draw';
+              changePred.mutate({ predictedWinner: w });
+            }}
+          />
+
+          {/* Community pick */}
+          <PredictionPoll poll={poll} teamA={teamAName} teamB={teamBName} />
+
+          {/* Comments list — input is fixed at screen bottom via CommentInputBar */}
+          <CommentSection
+            contextType="match"
+            contextId={id ?? ''}
+            userId={user?.id ?? null}
+            displayName={profile?.displayName ?? user?.displayName ?? null}
+            hideInput
+          />
+
+        </View>
+      )}
 
       {/* ── Squad ─────────────────────────────────────── */}
       {activeTab === 'Squad' && (
@@ -1950,26 +2184,58 @@ function CricketMatchDetailScreen() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }}>
       {BackButton}
-      <ScrollView
-        stickyHeaderIndices={[1]}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 80 }}
-        keyboardShouldPersistTaps="handled"
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={0}
       >
-        {/* [0] Scrolls away */}
-        <MatchHeader raw={raw} />
+        <ScrollView
+          stickyHeaderIndices={[1]}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: activeTab === 'Predict' ? 100 : 40 }}
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* [0] Scrolls away */}
+          <MatchHeader raw={raw} />
 
-        {/* [1] Sticky */}
-        <TabBar active={activeTab} onChange={setActiveTab} />
+          {/* [1] Sticky */}
+          <TabBar active={activeTab} onChange={setActiveTab} />
 
-        {/* [2] Content */}
-        {TabContent}
-      </ScrollView>
+          {/* [2] Tab content */}
+          {TabContent}
+        </ScrollView>
+
+        {/* Instagram-style fixed comment input — only on Predict tab */}
+        {activeTab === 'Predict' && (
+          <CommentInputBar
+            contextType="match"
+            contextId={id ?? ''}
+            userId={user?.id ?? null}
+            displayName={profile?.displayName ?? user?.displayName ?? null}
+          />
+        )}
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
 // ── Football: Team crest (logo or flag fallback) ─────────────
+
+function MatchChip({ icon, label }: { icon: string; label: string }) {
+  if (!label || label === '—') return null;
+  return (
+    <View style={{
+      flexDirection: 'row', alignItems: 'center', gap: 5,
+      backgroundColor: colors.cardElevated, borderRadius: 20,
+      paddingHorizontal: 12, paddingVertical: 7,
+    }}>
+      <Ionicons name={icon as any} size={12} color={colors.textMuted} />
+      <Text style={{ color: colors.textSecondary, fontSize: font.sm, fontWeight: '500' }} numberOfLines={1}>
+        {label}
+      </Text>
+    </View>
+  );
+}
 
 function FootballTeamCrest({ logo, flag, size }: { logo: string; flag: string; color: string; size: number }) {
   return <TeamCrest logo={logo} flag={flag} size={size} />;
@@ -1989,103 +2255,148 @@ function FootballMatchHeader({ match }: { match: FootballMatch }) {
   const t1Wins = isDone && homeGoals !== null && awayGoals !== null && homeGoals > awayGoals;
   const t2Wins = isDone && homeGoals !== null && awayGoals !== null && awayGoals > homeGoals;
 
-  const scoreText = (homeGoals !== null && awayGoals !== null) ? `${homeGoals} - ${awayGoals}` : '- vs -';
+  const hasScore  = homeGoals !== null && awayGoals !== null;
+  const scoreText = hasScore ? `${homeGoals} – ${awayGoals}` : 'VS';
   const htText = (match.score.htHome != null && match.score.htAway != null)
-    ? `HT ${match.score.htHome} - ${match.score.htAway}`
+    ? `HT ${match.score.htHome} – ${match.score.htAway}`
     : null;
+
+  const goalEvents    = (match.events ?? []).filter(e => e.type === 'Goal');
+  const homeGoalEvts  = goalEvents.filter(e => e.teamId === t1.id);
+  const awayGoalEvts  = goalEvents.filter(e => e.teamId === t2.id);
+  const showGoalEvts  = (isDone || isLive) && goalEvents.length > 0;
 
   return (
     <View>
       <LinearGradient
-        colors={[t1.color + '25', colors.card, colors.card, t2.color + '25']}
+        colors={[t1.color + '35', colors.card, colors.card, t2.color + '35']}
         start={{ x: 0, y: 0.5 }}
         end={{ x: 1, y: 0.5 }}
         style={{ paddingBottom: spacing.xxl }}
       >
-        {/* Stage + group pill */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, paddingTop: spacing.sm, paddingBottom: spacing.lg }}>
-          <View style={{
-            backgroundColor: colors.accent + '20', borderRadius: 12,
-            paddingHorizontal: spacing.md, paddingVertical: 3,
-            borderWidth: 1, borderColor: colors.accent + '40',
-          }}>
-            <Text style={{ color: colors.accent, fontSize: font.xs, fontWeight: '800', letterSpacing: 1 }}>
-              ★ {match.stage}
-            </Text>
-          </View>
-          {match.group && (
-            <Text style={{ color: colors.textSecondary, fontSize: font.xs }}>Group {match.group}</Text>
-          )}
+        {/* Stage */}
+        <View style={{ alignItems: 'center', paddingTop: spacing.lg, paddingBottom: spacing.xl }}>
+          <Text style={{ color: colors.accent, fontSize: font.xs, fontWeight: '800', letterSpacing: 2 }}>
+            ★ {(match.stage || '').toUpperCase()}{match.group ? `  ·  GROUP ${match.group}` : ''}
+          </Text>
         </View>
 
         {/* Teams + score row */}
         <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.lg }}>
           {/* Home team */}
-          <View style={{ flex: 1, alignItems: 'center' }}>
+          <View style={{ flex: 1, alignItems: 'center', gap: spacing.sm }}>
             <View style={{
-              padding: t1Wins ? 4 : 2, borderRadius: 44,
-              borderWidth: t1Wins ? 2 : 0, borderColor: t1.color + '90',
+              padding: t1Wins ? 4 : 0, borderRadius: 48,
+              borderWidth: t1Wins ? 2 : 0, borderColor: t1.color + '80',
+              shadowColor: t1.color, shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.2, shadowRadius: 10, elevation: 3,
             }}>
-              <FootballTeamCrest logo={t1.logo} flag={t1.flag} color={t1.color} size={64} />
+              <FootballTeamCrest logo={t1.logo} flag={t1.flag} color={t1.color} size={88} />
             </View>
             <Text style={{
               color: t1Wins ? colors.textPrimary : colors.textSecondary,
               fontSize: font.md, fontWeight: t1Wins ? '800' : '600',
-              marginTop: spacing.sm, textAlign: 'center',
+              textAlign: 'center',
             }} numberOfLines={1}>
               {t1.flag} {t1.shortName}
             </Text>
+            {t1Wins && (
+              <View style={{ backgroundColor: colors.success + '18', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2 }}>
+                <Text style={{ color: colors.success, fontSize: font.xs, fontWeight: '700' }}>Winner</Text>
+              </View>
+            )}
           </View>
 
           {/* Center: score */}
-          <View style={{ alignItems: 'center', paddingHorizontal: spacing.md, minWidth: 84 }}>
+          <View style={{ alignItems: 'center', paddingHorizontal: spacing.md, minWidth: 96 }}>
             {isLive && (
               <View style={{
-                backgroundColor: colors.live + '20', borderRadius: 16,
-                paddingHorizontal: spacing.md, paddingVertical: spacing.xs,
-                borderWidth: 1, borderColor: colors.live + '50', marginBottom: spacing.sm,
+                backgroundColor: colors.live + '15', borderRadius: 16,
+                paddingHorizontal: spacing.md, paddingVertical: 4,
+                borderWidth: 1, borderColor: colors.live + '40',
+                flexDirection: 'row', alignItems: 'center', gap: 5,
+                marginBottom: spacing.sm,
               }}>
+                <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: colors.live }} />
                 <Text style={{ color: colors.live, fontSize: font.xs, fontWeight: '800', letterSpacing: 1 }}>
-                  ● {match.minute ? `${match.minute}'` : 'LIVE'}
+                  {match.minute ? `${match.minute}'` : 'LIVE'}
                 </Text>
               </View>
             )}
             <Text style={{
               color: isUpcoming ? colors.textMuted : colors.textPrimary,
-              fontSize: isUpcoming ? font.lg : 32, fontWeight: '800', letterSpacing: 1,
+              fontSize: isUpcoming ? font.xxxl : 36,
+              fontWeight: '900',
+              letterSpacing: isUpcoming ? 3 : 0,
             }}>
               {scoreText}
             </Text>
             {htText && (
               <Text style={{ color: colors.textMuted, fontSize: font.xs, marginTop: 2 }}>{htText}</Text>
             )}
-            {isUpcoming && (
-              <Text style={{ color: colors.textMuted + '60', fontSize: font.xxl, fontWeight: '900', marginTop: spacing.xs }}>VS</Text>
-            )}
           </View>
 
           {/* Away team */}
-          <View style={{ flex: 1, alignItems: 'center' }}>
+          <View style={{ flex: 1, alignItems: 'center', gap: spacing.sm }}>
             <View style={{
-              padding: t2Wins ? 4 : 2, borderRadius: 44,
-              borderWidth: t2Wins ? 2 : 0, borderColor: t2.color + '90',
+              padding: t2Wins ? 4 : 0, borderRadius: 48,
+              borderWidth: t2Wins ? 2 : 0, borderColor: t2.color + '80',
+              shadowColor: t2.color, shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.2, shadowRadius: 10, elevation: 3,
             }}>
-              <FootballTeamCrest logo={t2.logo} flag={t2.flag} color={t2.color} size={64} />
+              <FootballTeamCrest logo={t2.logo} flag={t2.flag} color={t2.color} size={88} />
             </View>
             <Text style={{
               color: t2Wins ? colors.textPrimary : colors.textSecondary,
               fontSize: font.md, fontWeight: t2Wins ? '800' : '600',
-              marginTop: spacing.sm, textAlign: 'center',
+              textAlign: 'center',
             }} numberOfLines={1}>
               {t2.flag} {t2.shortName}
             </Text>
+            {t2Wins && (
+              <View style={{ backgroundColor: colors.success + '18', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2 }}>
+                <Text style={{ color: colors.success, fontSize: font.xs, fontWeight: '700' }}>Winner</Text>
+              </View>
+            )}
           </View>
         </View>
 
-        {/* Status strip */}
+        {/* Goal scorers */}
+        {showGoalEvts && (
+          <View style={{ flexDirection: 'row', paddingHorizontal: spacing.lg, marginTop: spacing.md }}>
+            {/* Home goals — left aligned */}
+            <View style={{ flex: 1, gap: 3 }}>
+              {homeGoalEvts.map((g, i) => {
+                const surname = g.player.split(' ').pop() ?? g.player;
+                const min = g.extra ? `${g.minute}+${g.extra}'` : `${g.minute}'`;
+                return (
+                  <Text key={i} style={{ fontSize: font.xs, color: colors.textSecondary, lineHeight: 17 }}>
+                    ⚽ {min} {surname}{g.detail === 'Own Goal' ? ' (OG)' : ''}
+                  </Text>
+                );
+              })}
+            </View>
+            {/* Spacer matches center score column width */}
+            <View style={{ width: 120 }} />
+            {/* Away goals — right aligned */}
+            <View style={{ flex: 1, gap: 3, alignItems: 'flex-end' }}>
+              {awayGoalEvts.map((g, i) => {
+                const surname = g.player.split(' ').pop() ?? g.player;
+                const min = g.extra ? `${g.minute}+${g.extra}'` : `${g.minute}'`;
+                return (
+                  <Text key={i} style={{ fontSize: font.xs, color: colors.textSecondary, textAlign: 'right', lineHeight: 17 }}>
+                    {surname}{g.detail === 'Own Goal' ? ' (OG)' : ''} {min} ⚽
+                  </Text>
+                );
+              })}
+            </View>
+          </View>
+        )}
+
+        {/* Status strip (FT / HT / live minute) */}
         {match.statusText ? (
           <View style={{
-            marginTop: spacing.xl, marginHorizontal: spacing.lg,
+            marginTop: spacing.lg, marginHorizontal: spacing.lg,
             backgroundColor: isLive ? colors.live + '15' : colors.cardElevated,
             borderRadius: radius.sm, paddingVertical: spacing.sm,
             paddingHorizontal: spacing.md,
@@ -2147,9 +2458,11 @@ function FootballPredictionPreview({ matchId, homeTeam, awayTeam }: {
   return (
     <Pressable onPress={() => router.push(`/(tip-detail)/${matchId}?sport=football` as any)}>
       <View style={{
-        marginHorizontal: spacing.lg, marginTop: spacing.lg,
-        backgroundColor: colors.card, borderRadius: radius.lg,
-        borderWidth: 1, borderColor: colors.border, padding: spacing.lg,
+        marginHorizontal: spacing.lg, marginTop: spacing.sm,
+        backgroundColor: colors.card, borderRadius: radius.xl,
+        padding: spacing.lg,
+        shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.07, shadowRadius: 12, elevation: 2,
       }}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
@@ -2168,6 +2481,7 @@ function FootballPredictionPreview({ matchId, homeTeam, awayTeam }: {
           draw={tip.draw}
           awayWin={tip.awayWin}
           isKnockout={tip.isKnockout}
+          flat
         />
       </View>
     </Pressable>
@@ -2180,6 +2494,9 @@ function FootballMatchDetailScreen() {
   const { id }  = useLocalSearchParams<{ id: string }>();
   const router  = useRouter();
   const { data: match, isLoading, isError, isRefetching, refetch } = useFootballMatchDetail(id);
+  const { user, profile, isAuthenticated } = useAuth();
+  const { query: userPredQuery, submit: submitPred, change: changePred } = useUserPrediction(id ?? '', isAuthenticated);
+  const { data: poll } = usePredictionPoll(id ?? '');
 
   const BackButton = (
     <View style={{
@@ -2187,7 +2504,7 @@ function FootballMatchDetailScreen() {
       paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, backgroundColor: colors.bg,
     }}>
       <Pressable
-        onPress={() => router.back()}
+        onPress={() => safeBack()}
         style={({ pressed }) => ({
           opacity: pressed ? 0.7 : 1, flexDirection: 'row', alignItems: 'center', padding: spacing.xs,
         })}
@@ -2238,16 +2555,53 @@ function FootballMatchDetailScreen() {
 
         <FootballPredictionPreview matchId={match.id} homeTeam={match.homeTeam} awayTeam={match.awayTeam} />
 
-        <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.lg }}>
-          <SectionCard title="MATCH INFO">
-            <InfoRow label="Stage"   value={match.stage} />
-            {match.group && <InfoRow label="Group" value={`Group ${match.group}`} />}
-            <InfoRow label="Date"    value={formatMatchDate(match.date)} />
-            <InfoRow label="Kickoff" value={match.time} />
-            <InfoRow label="Venue"   value={match.venue || '—'} />
-            {match.city ? <InfoRow label="City" value={match.city} /> : null}
-          </SectionCard>
-        </View>
+        {/* Match context chips */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ paddingHorizontal: spacing.lg, paddingTop: spacing.xl, paddingBottom: spacing.sm, gap: spacing.sm }}
+        >
+          <MatchChip icon="trophy-outline"   label={match.stage} />
+          <MatchChip icon="calendar-outline" label={formatMatchDate(match.date)} />
+          <MatchChip icon="time-outline"     label={match.time} />
+          {(match.venue || match.city) ? <MatchChip icon="location-outline" label={match.venue || match.city || ''} /> : null}
+          {match.group ? <MatchChip icon="people-outline" label={`Group ${match.group}`} /> : null}
+        </ScrollView>
+
+        {/* User prediction */}
+        <UserPredictionCard
+          teamA={match.homeTeam.name}
+          teamB={match.awayTeam.name}
+          prediction={userPredQuery.data ?? null}
+          isLoading={userPredQuery.isLoading}
+          isSubmitting={submitPred.isPending || changePred.isPending}
+          matchEnded={match.status === 'completed'}
+          onSubmit={(winner: PredictedWinner) => {
+            const w = winner === 'teamA' ? match.homeTeam.name : winner === 'teamB' ? match.awayTeam.name : 'draw';
+            submitPred.mutate({
+              predictedWinner: w,
+              teamA:           match.homeTeam.name,
+              teamB:           match.awayTeam.name,
+              sport:           'football',
+              displayName:     profile?.displayName ?? user?.displayName ?? 'User',
+            });
+          }}
+          onChange={(winner: PredictedWinner) => {
+            const w = winner === 'teamA' ? match.homeTeam.name : winner === 'teamB' ? match.awayTeam.name : 'draw';
+            changePred.mutate({ predictedWinner: w });
+          }}
+        />
+
+        {/* Poll */}
+        <PredictionPoll poll={poll} teamA={match.homeTeam.shortName} teamB={match.awayTeam.shortName} />
+
+        {/* Comments */}
+        <CommentSection
+          contextType="match"
+          contextId={match.id}
+          userId={user?.id ?? null}
+          displayName={profile?.displayName ?? user?.displayName ?? null}
+        />
       </ScrollView>
     </SafeAreaView>
   );
@@ -2256,6 +2610,6 @@ function FootballMatchDetailScreen() {
 // ── Main screen ───────────────────────────────────────────────
 
 export default function MatchDetailScreen() {
-  const isFootball = useIsFootball();
-  return isFootball ? <FootballMatchDetailScreen /> : <CricketMatchDetailScreen />;
+  const { sport } = useLocalSearchParams<{ id: string; sport?: string }>();
+  return sport === 'football' ? <FootballMatchDetailScreen /> : <CricketMatchDetailScreen />;
 }

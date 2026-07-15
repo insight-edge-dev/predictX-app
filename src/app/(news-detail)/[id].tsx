@@ -8,16 +8,16 @@ import {
 } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { safeBack } from '@/utils/navigation';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNewsDetail } from '@/hooks/useHome';
-import { API_BASE_URL } from '@/config/api';
 import { colors, spacing, font, radius } from '@/constants/theme';
 
 function proxyImg(imageId: string | null | undefined) {
   if (!imageId) return null;
-  return `${API_BASE_URL.replace('/api', '')}/api/img/news/${imageId}`;
+  return `https://static.cricbuzz.com/a/img/v1/i2/c${imageId}/i.jpg`;
 }
 
 function formatDate(ts: number | null) {
@@ -41,7 +41,7 @@ export default function NewsDetailScreen() {
 
         {/* Back button */}
         <Pressable
-          onPress={() => router.back()}
+          onPress={() => safeBack()}
           style={({ pressed }) => ({
             opacity: pressed ? 0.7 : 1,
             flexDirection: 'row', alignItems: 'center', gap: 6,
@@ -69,7 +69,7 @@ export default function NewsDetailScreen() {
             <Text style={{ color: colors.textSecondary, fontSize: font.md, marginTop: spacing.lg, textAlign: 'center' }}>
               Could not load article
             </Text>
-            <Pressable onPress={() => router.back()} style={{ marginTop: spacing.xl }}>
+            <Pressable onPress={() => safeBack()} style={{ marginTop: spacing.xl }}>
               <Text style={{ color: colors.accent, fontSize: font.sm }}>Go back</Text>
             </Pressable>
           </View>
@@ -90,7 +90,6 @@ export default function NewsDetailScreen() {
                   contentFit="cover"
                   cachePolicy="disk"
                   transition={300}
-                  placeholder={{ color: colors.cardElevated }}
                 />
                 {article.coverImage?.caption ? (
                   <View style={{ backgroundColor: 'rgba(0,0,0,0.5)', padding: spacing.sm }}>
@@ -157,7 +156,7 @@ export default function NewsDetailScreen() {
                 <Text
                   key={idx}
                   style={{
-                    color:        idx === 0 ? colors.textSecondary : '#CBD5E1',
+                    color:        colors.textSecondary,
                     fontSize:     font.base,
                     lineHeight:   26,
                     marginBottom: spacing.lg,

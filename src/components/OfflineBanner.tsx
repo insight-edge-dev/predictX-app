@@ -1,16 +1,26 @@
 import { useEffect, useState, useRef } from 'react';
-import { View, Text, Animated } from 'react-native';
+import { View, Text } from 'react-native';
+import Animated, {
+  useSharedValue, useAnimatedStyle,
+  withSpring, withTiming,
+  runOnJS,
+} from 'react-native-reanimated';
 import NetInfo from '@react-native-community/netinfo';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, font } from '@/constants/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { springs, timings } from '@/utils/anim';
 
 export default function OfflineBanner() {
-  const [isOffline, setIsOffline]     = useState(false);
-  const [showBack,  setShowBack]      = useState(false);
-  const slideY   = useRef(new Animated.Value(-60)).current;
-  const insets   = useSafeAreaInsets();
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [isOffline, setIsOffline] = useState(false);
+  const [showBack,  setShowBack]  = useState(false);
+  const timerRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const insets    = useSafeAreaInsets();
+
+  const translateY  = useSharedValue(-60);
+  const bannerStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: translateY.value }],
+  }));
 
   useEffect(() => {
     const unsub = NetInfo.addEventListener(state => {
@@ -21,19 +31,19 @@ export default function OfflineBanner() {
     return () => { unsub(); if (timerRef.current) clearTimeout(timerRef.current); };
   }, []);
 
-  // Animate in/out
   useEffect(() => {
     if (isOffline) {
       setShowBack(false);
-      Animated.spring(slideY, { toValue: 0, useNativeDriver: true, speed: 20, bounciness: 4 }).start();
+      translateY.value = withSpring(0, springs.smooth);
     } else if (showBack) {
-      // Show "Back online" briefly then slide out
-      Animated.spring(slideY, { toValue: 0, useNativeDriver: true, speed: 20, bounciness: 4 }).start();
+      translateY.value = withSpring(0, springs.smooth);
       timerRef.current = setTimeout(() => {
-        Animated.timing(slideY, { toValue: -60, duration: 300, useNativeDriver: true }).start(() => setShowBack(false));
+        translateY.value = withTiming(-60, timings.fast, (finished) => {
+          if (finished) runOnJS(setShowBack)(false);
+        });
       }, 2000);
     } else {
-      Animated.timing(slideY, { toValue: -60, duration: 250, useNativeDriver: true }).start();
+      translateY.value = withTiming(-60, timings.fast);
     }
   }, [isOffline, showBack]);
 
@@ -43,10 +53,9 @@ export default function OfflineBanner() {
 
   return (
     <Animated.View
-      style={{
+      style={[{
         position: 'absolute', top: insets.top, left: 0, right: 0, zIndex: 9999,
-        transform: [{ translateY: slideY }],
-      }}
+      }, bannerStyle]}
     >
       <View style={{
         flexDirection: 'row', alignItems: 'center', justifyContent: 'center',

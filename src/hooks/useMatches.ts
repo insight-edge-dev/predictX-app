@@ -156,7 +156,7 @@ export function useMatches(): UseQueryResult<Match[], Error> {
     refetchOnMount:       true,
     refetchOnWindowFocus: false,
     retry:                0,
-    placeholderData:      (_, prev) => prev,
+    placeholderData:      (prev) => prev,
   });
 }
 

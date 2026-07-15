@@ -1,32 +1,61 @@
 import { useEffect, useRef } from 'react';
-import { Animated, Pressable, Image, Dimensions, View, Linking, type ScrollView } from 'react-native';
+import { Pressable, Image, Dimensions, View, Linking } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedScrollHandler,
+  useAnimatedStyle,
+  interpolate,
+  Extrapolation,
+  type SharedValue,
+} from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
 import { useLeague } from '@/contexts/LeagueContext';
 import { useBanners, type Banner } from '@/hooks/useBanners';
 import { colors, spacing, radius } from '@/constants/theme';
 
-const SCREEN_WIDTH  = Dimensions.get('window').width;
-const ITEM_WIDTH    = SCREEN_WIDTH - spacing.lg * 2;
-const ITEM_HEIGHT   = ITEM_WIDTH * 0.46;
-const ITEM_SPACING  = 10;
-const SNAP_INTERVAL = ITEM_WIDTH + ITEM_SPACING;
+const SCREEN_WIDTH   = Dimensions.get('window').width;
+const ITEM_WIDTH     = SCREEN_WIDTH - spacing.lg * 2;
+const ITEM_HEIGHT    = ITEM_WIDTH * 0.46;
+const ITEM_SPACING   = 10;
+const SNAP_INTERVAL  = ITEM_WIDTH + ITEM_SPACING;
 const AUTO_ROTATE_MS = 4500;
 
 interface Props {
   placement: string;
-  /** Discovery screen passes this to switch into a league's home view. */
-  onNavigateLeagueHome?: (slug: string) => void;
 }
 
-export function BannerCarousel({ placement, onNavigateLeagueHome }: Props) {
+function DotIndicator({ scrollX, index }: { scrollX: SharedValue<number>; index: number }) {
+  const style = useAnimatedStyle(() => {
+    const inputRange = [
+      (index - 1) * SNAP_INTERVAL,
+      index * SNAP_INTERVAL,
+      (index + 1) * SNAP_INTERVAL,
+    ];
+    return {
+      width:   interpolate(scrollX.value, inputRange, [6, 18, 6],    Extrapolation.CLAMP),
+      opacity: interpolate(scrollX.value, inputRange, [0.3, 1, 0.3], Extrapolation.CLAMP),
+    };
+  });
+  return (
+    <Animated.View style={[{ height: 6, borderRadius: 3, backgroundColor: colors.accent }, style]} />
+  );
+}
+
+export function BannerCarousel({ placement }: Props) {
   const router = useRouter();
   const { setLeagueId } = useLeague();
   const { data: banners = [] } = useBanners(placement);
 
-  const scrollRef    = useRef<ScrollView>(null);
-  const scrollX      = useRef(new Animated.Value(0)).current;
-  const indexRef     = useRef(0);
-  const intervalRef  = useRef<ReturnType<typeof setInterval> | null>(null);
+  const scrollRef   = useRef<any>(null);
+  const indexRef    = useRef(0);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const scrollX     = useSharedValue(0);
+
+  const onScroll = useAnimatedScrollHandler({
+    onScroll: (e) => {
+      scrollX.value = e.contentOffset.x;
+    },
+  });
 
   const startAutoRotate = () => {
     if (intervalRef.current) clearInterval(intervalRef.current);
@@ -54,7 +83,11 @@ export function BannerCarousel({ placement, onNavigateLeagueHome }: Props) {
         break;
       case 'match':
         if (banner.link_meta?.league) setLeagueId(banner.link_meta.league);
-        router.push(`/(match-details)/${banner.link_value}` as any);
+        if (banner.link_meta?.sport === 'football') {
+          router.push(`/(match-details)/${banner.link_value}?sport=football` as any);
+        } else {
+          router.push(`/(match-details)/${banner.link_value}` as any);
+        }
         break;
       case 'tip':
         if (banner.link_meta?.league) setLeagueId(banner.link_meta.league);
@@ -63,7 +96,7 @@ export function BannerCarousel({ placement, onNavigateLeagueHome }: Props) {
       case 'league_home':
         if (banner.link_value) {
           setLeagueId(banner.link_value);
-          onNavigateLeagueHome?.(banner.link_value);
+          router.push('/(tabs)/(matches)');
         }
         break;
       case 'app_section':
@@ -85,10 +118,7 @@ export function BannerCarousel({ placement, onNavigateLeagueHome }: Props) {
         style={{ marginHorizontal: -spacing.lg }}
         contentContainerStyle={{ paddingHorizontal: spacing.lg, gap: ITEM_SPACING }}
         scrollEventThrottle={16}
-        onScroll={Animated.event(
-          [{ nativeEvent: { contentOffset: { x: scrollX } } }],
-          { useNativeDriver: false }
-        )}
+        onScroll={onScroll}
         onScrollBeginDrag={() => {
           if (intervalRef.current) clearInterval(intervalRef.current);
         }}
@@ -114,32 +144,9 @@ export function BannerCarousel({ placement, onNavigateLeagueHome }: Props) {
 
       {banners.length > 1 && (
         <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6, marginTop: spacing.sm }}>
-          {banners.map((_, i) => {
-            const inputRange = [
-              (i - 1) * SNAP_INTERVAL,
-              i * SNAP_INTERVAL,
-              (i + 1) * SNAP_INTERVAL,
-            ];
-            const dotWidth = scrollX.interpolate({
-              inputRange,
-              outputRange: [6, 18, 6],
-              extrapolate: 'clamp',
-            });
-            const opacity = scrollX.interpolate({
-              inputRange,
-              outputRange: [0.3, 1, 0.3],
-              extrapolate: 'clamp',
-            });
-            return (
-              <Animated.View
-                key={i}
-                style={{
-                  width: dotWidth, height: 6, borderRadius: 3,
-                  backgroundColor: colors.accent, opacity,
-                }}
-              />
-            );
-          })}
+          {banners.map((_, i) => (
+            <DotIndicator key={i} scrollX={scrollX} index={i} />
+          ))}
         </View>
       )}
     </View>

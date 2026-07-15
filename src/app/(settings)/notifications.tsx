@@ -1,17 +1,22 @@
 import {
-  View, Text, FlatList, Pressable, Modal,
-  Image, ScrollView, Linking, Animated, Alert,
+  View, Text, Pressable, Modal,
+  Image, ScrollView, Linking, Animated, Alert, Switch,
 } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { useRouter } from 'expo-router';
+import { safeBack } from '@/utils/navigation';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { useEffect, useRef, useState, useCallback } from 'react';
 import * as SecureStore from 'expo-secure-store';
 import { supabase } from '@/lib/supabase';
 import { colors, spacing, font, radius } from '@/constants/theme';
 import api from '@/services/api';
 import { useNotificationBadge } from '@/contexts/NotificationBadgeContext';
+import { PageLoader } from '@/components/PageLoader';
+import { requestPushPermissionAndRegister } from '@/hooks/usePushNotifications';
+import { useAuth } from '@/contexts/AuthContext';
 
 const DISMISSED_KEY = 'dismissed_notifications';
 
@@ -82,7 +87,7 @@ function NotificationModal({
         paddingHorizontal: spacing.xl,
         opacity: opacityAnim,
       }}>
-        <Pressable style={{ position: 'absolute', inset: 0 } as any} onPress={close} />
+        <Pressable style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} onPress={close} />
 
         <Animated.View style={{
           width: '100%',
@@ -259,6 +264,85 @@ function NotificationCard({ item, onPress, onDismiss }: { item: AppNotification;
   );
 }
 
+// ── Push Notification Preferences ────────────────────────────
+
+interface NotifPrefs {
+  matchAlerts:       boolean;
+  predictionResults: boolean;
+  liveScore:         boolean;
+  adminBroadcasts:   boolean;
+}
+
+function PushPrefsSection() {
+  const { isAuthenticated } = useAuth();
+
+  const { data: prefs } = useQuery<NotifPrefs>({
+    queryKey: ['notification-prefs'],
+    queryFn:  () => api.get('/user/notification-prefs'),
+    enabled:  isAuthenticated,
+    staleTime: 60_000,
+  });
+
+  const queryClient = useQueryClient();
+
+  const { mutate: updatePref } = useMutation({
+    mutationFn: (patch: Partial<NotifPrefs>) => api.put('/user/notification-prefs', patch),
+    onMutate: async (patch) => {
+      await queryClient.cancelQueries({ queryKey: ['notification-prefs'] });
+      const prev = queryClient.getQueryData<NotifPrefs>(['notification-prefs']);
+      queryClient.setQueryData<NotifPrefs>(['notification-prefs'], old => old ? { ...old, ...patch } : old);
+      return { prev };
+    },
+    onError: (_err, _patch, ctx: any) => {
+      if (ctx?.prev) queryClient.setQueryData(['notification-prefs'], ctx.prev);
+    },
+  });
+
+  if (!isAuthenticated) return null;
+
+  const ROWS: { key: keyof NotifPrefs; label: string; sub: string }[] = [
+    { key: 'matchAlerts',       label: 'Match Alerts',        sub: 'Notify 30 min before a match starts'    },
+    { key: 'predictionResults', label: 'Prediction Results',  sub: 'Know when your prediction is resolved'  },
+    { key: 'liveScore',         label: 'Live Score Alerts',   sub: 'Wicket milestones during live matches'  },
+    { key: 'adminBroadcasts',   label: 'App Announcements',   sub: 'Important updates from PredictX'       },
+  ];
+
+  return (
+    <View style={{ marginHorizontal: spacing.lg, marginBottom: spacing.xl }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.md }}>
+        <Text style={{ color: colors.textPrimary, fontSize: font.base, fontWeight: '700' }}>Push Notifications</Text>
+        <Pressable
+          onPress={() => requestPushPermissionAndRegister()}
+          style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
+        >
+          <Text style={{ color: colors.accent, fontSize: font.xs, fontWeight: '700' }}>Enable</Text>
+        </Pressable>
+      </View>
+
+      <View style={{ backgroundColor: colors.card, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, overflow: 'hidden' }}>
+        {ROWS.map((row, idx) => (
+          <View key={row.key}>
+            {idx > 0 && <View style={{ height: 1, backgroundColor: colors.border, marginHorizontal: spacing.lg }} />}
+            <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.lg, paddingVertical: spacing.md, gap: spacing.md }}>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: colors.textPrimary, fontSize: font.sm, fontWeight: '600', marginBottom: 2 }}>{row.label}</Text>
+                <Text style={{ color: colors.textMuted, fontSize: font.xs, lineHeight: 16 }}>{row.sub}</Text>
+              </View>
+              <Switch
+                value={prefs?.[row.key] ?? true}
+                onValueChange={(v) => updatePref({ [row.key]: v })}
+                trackColor={{ false: colors.border, true: colors.accent + '60' }}
+                thumbColor={prefs?.[row.key] ? colors.accent : colors.textMuted}
+                ios_backgroundColor={colors.border}
+              />
+            </View>
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
 // ── Main screen ───────────────────────────────────────────────
 
 export default function NotificationsScreen() {
@@ -335,7 +419,7 @@ export default function NotificationsScreen() {
         paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
         borderBottomWidth: 1, borderBottomColor: colors.border,
       }}>
-        <Pressable onPress={() => router.back()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        <Pressable onPress={() => safeBack()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1, marginRight: spacing.md })}>
           <Ionicons name="chevron-back" size={24} color={colors.textPrimary} />
         </Pressable>
@@ -349,7 +433,11 @@ export default function NotificationsScreen() {
         </View>
       </View>
 
-      <FlatList
+      <PageLoader show={isLoading && allData.length === 0} />
+
+      <PushPrefsSection />
+
+      <FlashList
         data={visibleNotifications}
         keyExtractor={n => n.id}
         renderItem={({ item }) => (
@@ -359,7 +447,8 @@ export default function NotificationsScreen() {
             onDismiss={() => dismissNotification(item.id)}
           />
         )}
-        contentContainerStyle={{ padding: spacing.lg, paddingBottom: 40, flexGrow: 1 }}
+        estimatedItemSize={80}
+        contentContainerStyle={{ padding: spacing.lg, paddingBottom: 40 }}
         showsVerticalScrollIndicator={false}
         onEndReached={() => { if (hasMore) setVisibleCount(c => c + 20); }}
         onEndReachedThreshold={0.3}

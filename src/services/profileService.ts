@@ -32,3 +32,18 @@ export async function updateFavouriteTeams(
     return { error: e.message ?? 'Failed to update teams' };
   }
 }
+
+export async function uploadAvatarImage(
+  uri: string,
+  mimeType: string = 'image/jpeg',
+): Promise<{ avatarUrl: string | null; error: string | null }> {
+  try {
+    const formData = new FormData();
+    const filename = uri.split('/').pop() ?? 'avatar.jpg';
+    formData.append('avatar', { uri, name: filename, type: mimeType } as any);
+    const res = await api.postForm<{ avatarUrl: string }>('/user/avatar', formData);
+    return { avatarUrl: res.avatarUrl, error: null };
+  } catch (e: any) {
+    return { avatarUrl: null, error: e.message ?? 'Failed to upload photo' };
+  }
+}

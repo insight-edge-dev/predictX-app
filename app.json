@@ -1,11 +1,11 @@
 {
   "expo": {
     "name": "PredictX",
-    "slug": "ipl-iq",
+    "slug": "predictx",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "dark",
+    "userInterfaceStyle": "light",
     "scheme": "predictx",
     "splash": {
       "image": "./assets/splash-icon.png",
@@ -14,18 +14,22 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.insideedge.cricvora"
+      "bundleIdentifier": "com.insideedge.cricvora",
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "PredictX uses your photo library to set your profile picture.",
+        "NSCameraUsageDescription": "PredictX uses the camera to capture your profile picture."
+      }
     },
     "newArchEnabled": true,
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#0A0A0F",
+        "backgroundColor": "#F8F9FB",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "package": "com.insideedge.cricvora",
-      "versionCode": 2
+      "versionCode": 1
     },
     "web": {
       "favicon": "./assets/favicon.png",
@@ -35,7 +39,22 @@
       "expo-router",
       "expo-secure-store",
       "expo-image",
-      "expo-font"
+      "expo-font",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "PredictX uses your photo library to set your profile picture.",
+          "cameraPermission": "PredictX uses the camera to capture your profile picture."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/android-icon-monochrome.png",
+          "color": "#2563EB",
+          "defaultChannel": "default"
+        }
+      ]
     ],
     "extra": {
       "router": {},

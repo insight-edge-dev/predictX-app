@@ -1,144 +1,228 @@
 import {
   View, Text, Pressable, ScrollView, Image,
-  TextInput, ActivityIndicator, Modal, Alert, Platform,
+  TextInput, ActivityIndicator, Modal, Alert, Platform, StyleSheet,
 } from "react-native";
 import { useState } from "react";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
+import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLeague } from "@/contexts/LeagueContext";
-import { updateProfile } from "@/services/profileService";
+import { updateProfile, uploadAvatarImage } from "@/services/profileService";
 import { getTeamColor, getTeamLogo } from "@/theme/colors";
+import { useMyPredictionStats } from "@/hooks/useUserPrediction";
 import { IPL_TEAMS } from "@/constants/iplTeams";
 import { colors, spacing, font, radius } from "@/constants/theme";
 
 const ALL_TEAMS = Object.values(IPL_TEAMS);
 
-const cardShadow = Platform.select({
-  ios: {
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-  },
-  android: { elevation: 3 },
-  default: {},
-});
+const card: object = {
+  backgroundColor: "#FFFFFF",
+  borderRadius: 18,
+  borderWidth: StyleSheet.hairlineWidth,
+  borderColor: "#E5E7EB",
+  ...Platform.select({
+    ios:     { shadowColor: "#1E40AF", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8 },
+    android: { elevation: 2 },
+    default: {},
+  }),
+};
 
-const avatarShadow = Platform.select({
-  ios: {
-    shadowColor: "#1D4ED8",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-  },
-  android: { elevation: 4 },
-  default: {},
-});
+// ── Icon Bubble ───────────────────────────────────────────────
 
-// ── Avatar ────────────────────────────────────────────────────
-
-function Avatar({ name, size = 72, onGradient = false }: { name: string; size?: number; onGradient?: boolean }) {
-  const initials = name.split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 2);
-  return (
-    <View style={{
-      width: size + 6, height: size + 6, borderRadius: (size + 6) / 2,
-      padding: 2, borderWidth: 2,
-      borderColor: onGradient ? "rgba(255,255,255,0.5)" : colors.accent + "50",
-      backgroundColor: onGradient ? "rgba(255,255,255,0.25)" : colors.accent + "15",
-      ...(onGradient ? avatarShadow : null),
-    }}>
-      <View style={{
-        flex: 1, borderRadius: size / 2,
-        backgroundColor: onGradient ? "#fff" : colors.accent + "20",
-        alignItems: "center", justifyContent: "center",
-      }}>
-        <Text style={{ color: colors.accent, fontSize: size * 0.35, fontWeight: "900" }}>
-          {initials}
-        </Text>
-      </View>
-    </View>
-  );
-}
-
-// ── Stat box ──────────────────────────────────────────────────
-
-function StatBox({ icon, value, label, color }: {
-  icon: keyof typeof Ionicons.glyphMap; value: string | number; label: string; color?: string;
+function IconBubble({
+  icon, iconColor, bg, size = 50,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  iconColor: string; bg: string; size?: number;
 }) {
-  const tint = color ?? colors.accent;
-  return (
-    <View style={{ flex: 1, alignItems: "center" }}>
-      <View style={{
-        width: 28, height: 28, borderRadius: 14, marginBottom: 6,
-        backgroundColor: tint + "15", alignItems: "center", justifyContent: "center",
-      }}>
-        <Ionicons name={icon} size={14} color={tint} />
-      </View>
-      <Text style={{ color: colors.textPrimary, fontSize: 18, fontWeight: "900", letterSpacing: -0.5 }}>
-        {value}
-      </Text>
-      <Text style={{ color: colors.textMuted, fontSize: 10, fontWeight: "600", marginTop: 2, textTransform: "uppercase", letterSpacing: 0.5 }}>
-        {label}
-      </Text>
-    </View>
-  );
-}
-
-// ── Team Circle ───────────────────────────────────────────────
-
-function TeamCircle({ shortName, size = 52 }: { shortName: string; size?: number }) {
-  const color   = getTeamColor(shortName);
-  const logoUrl = getTeamLogo("", shortName);
   return (
     <View style={{
       width: size, height: size, borderRadius: size / 2,
-      backgroundColor: color + "18",
-      borderWidth: 1.5, borderColor: color + "50",
-      alignItems: "center", justifyContent: "center",
+      backgroundColor: bg, alignItems: "center", justifyContent: "center",
     }}>
-      {logoUrl
-        ? <Image source={{ uri: logoUrl }} style={{ width: size * 0.65, height: size * 0.65 }} resizeMode="contain" />
-        : <Text style={{ color, fontSize: size * 0.3, fontWeight: "800" }}>{shortName}</Text>
-      }
+      <Ionicons name={icon} size={size * 0.46} color={iconColor} />
     </View>
+  );
+}
+
+// ── Stat Column (icon + number + label) with optional divider ─
+
+function StatCol({
+  icon, iconColor, bg, value, label, divider,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  iconColor: string; bg: string;
+  value: string | number; label: string;
+  divider?: boolean;
+}) {
+  return (
+    <>
+      <View style={{ flex: 1, alignItems: "center", gap: 8, paddingVertical: 4 }}>
+        <IconBubble icon={icon} iconColor={iconColor} bg={bg} />
+        <Text style={{ color: "#111827", fontSize: 20, fontWeight: "800", letterSpacing: -0.3 }}>
+          {value}
+        </Text>
+        <Text style={{ color: "#9CA3AF", fontSize: 10, fontWeight: "500", textAlign: "center" }}>
+          {label}
+        </Text>
+      </View>
+      {divider && (
+        <View style={{ width: StyleSheet.hairlineWidth, backgroundColor: "#E5E7EB", marginVertical: 8 }} />
+      )}
+    </>
+  );
+}
+
+// ── Avatar ────────────────────────────────────────────────────
+
+function Avatar({
+  name, avatarUrl, size = 80, onPress, uploading = false,
+}: {
+  name: string; avatarUrl?: string | null; size?: number;
+  onPress?: () => void; uploading?: boolean;
+}) {
+  const initials = name.split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 2);
+  return (
+    <Pressable onPress={onPress} disabled={!onPress} style={{ position: "relative" }}>
+      {/* Blue accent ring */}
+      <View style={{
+        width: size + 6, height: size + 6, borderRadius: (size + 6) / 2,
+        borderWidth: 2.5, borderColor: "#BFDBFE",
+        alignItems: "center", justifyContent: "center",
+        backgroundColor: "transparent",
+        ...Platform.select({
+          ios: { shadowColor: "#2563EB", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 8 },
+          android: { elevation: 4 },
+          default: {},
+        }),
+      }}>
+        <View style={{
+          width: size, height: size, borderRadius: size / 2,
+          overflow: "hidden", backgroundColor: "#EFF6FF",
+        }}>
+          {avatarUrl ? (
+            <Image source={{ uri: avatarUrl }} style={{ width: size, height: size }} resizeMode="cover" />
+          ) : (
+            <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+              <Text style={{ color: colors.accent, fontSize: size * 0.3, fontWeight: "800" }}>{initials}</Text>
+            </View>
+          )}
+          {uploading && (
+            <View style={{
+              ...StyleSheet.absoluteFillObject,
+              backgroundColor: "rgba(0,0,0,0.4)", alignItems: "center", justifyContent: "center",
+            }}>
+              <ActivityIndicator size="small" color="#fff" />
+            </View>
+          )}
+        </View>
+      </View>
+      {onPress && (
+        <View style={{
+          position: "absolute", bottom: 2, right: 2,
+          width: 24, height: 24, borderRadius: 12,
+          backgroundColor: "#2563EB",
+          borderWidth: 2, borderColor: "#fff",
+          alignItems: "center", justifyContent: "center",
+        }}>
+          <Ionicons name="camera" size={11} color="#fff" />
+        </View>
+      )}
+    </Pressable>
+  );
+}
+
+// ── Team Row ──────────────────────────────────────────────────
+
+function TeamRow({ shortName, last, onPress }: {
+  shortName: string; last?: boolean; onPress: () => void;
+}) {
+  const teamData = ALL_TEAMS.find(t => t.shortName === shortName);
+  const teamColor = getTeamColor(shortName);
+  const logoUrl   = getTeamLogo("", shortName);
+
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => ({
+        opacity: pressed ? 0.7 : 1,
+        flexDirection: "row", alignItems: "center",
+        paddingVertical: 16, paddingHorizontal: 20,
+        borderBottomWidth: last ? 0 : StyleSheet.hairlineWidth,
+        borderBottomColor: "#F3F4F6",
+        gap: 14,
+      })}
+    >
+      <View style={{
+        width: 52, height: 52, borderRadius: 26,
+        backgroundColor: teamColor + "12",
+        borderWidth: 1.5, borderColor: teamColor + "30",
+        alignItems: "center", justifyContent: "center",
+      }}>
+        {logoUrl
+          ? <Image source={{ uri: logoUrl }} style={{ width: 34, height: 34 }} resizeMode="contain" />
+          : <Text style={{ color: teamColor, fontSize: 12, fontWeight: "800" }}>{shortName}</Text>
+        }
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={{ color: "#111827", fontSize: 15, fontWeight: "700", marginBottom: 3 }}>{shortName}</Text>
+        <Text style={{ color: "#9CA3AF", fontSize: 13 }}>{teamData?.name ?? shortName}</Text>
+      </View>
+      <View style={{
+        width: 30, height: 30, borderRadius: 15,
+        backgroundColor: "#F3F4F6", alignItems: "center", justifyContent: "center",
+      }}>
+        <Ionicons name="chevron-forward" size={14} color="#9CA3AF" />
+      </View>
+    </Pressable>
   );
 }
 
 // ── Settings Row ──────────────────────────────────────────────
 
-function SettingsRow({ icon, label, danger, value, onPress, last }: {
+function SettingsRow({ icon, iconColor, iconBg, label, subtitle, onPress, last }: {
   icon: keyof typeof Ionicons.glyphMap;
-  label: string; danger?: boolean; value?: string;
-  onPress?: () => void; last?: boolean;
+  iconColor: string;
+  iconBg: string;
+  label: string;
+  subtitle?: string;
+  onPress?: () => void;
+  last?: boolean;
 }) {
   return (
     <Pressable
       onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onPress?.(); }}
       style={({ pressed }) => ({
-        opacity: pressed ? 0.75 : 1,
+        opacity: pressed ? 0.6 : 1,
         flexDirection: "row", alignItems: "center",
-        paddingVertical: 15, paddingHorizontal: spacing.lg,
-        borderBottomWidth: last ? 0 : 1,
-        borderBottomColor: colors.border,
+        paddingVertical: 14, paddingHorizontal: 16, gap: 14,
+        borderBottomWidth: last ? 0 : StyleSheet.hairlineWidth,
+        borderBottomColor: "#F3F4F6",
       })}
     >
       <View style={{
-        width: 36, height: 36, borderRadius: 10,
-        backgroundColor: danger ? colors.danger + "18" : colors.cardElevated,
-        borderWidth: 1, borderColor: danger ? colors.danger + "30" : colors.border,
-        alignItems: "center", justifyContent: "center", marginRight: 14,
+        width: 40, height: 40, borderRadius: 12,
+        backgroundColor: iconBg,
+        alignItems: "center", justifyContent: "center", flexShrink: 0,
       }}>
-        <Ionicons name={icon} size={17} color={danger ? colors.danger : colors.textSecondary} />
+        <Ionicons name={icon} size={19} color={iconColor} />
       </View>
-      <Text style={{ flex: 1, fontSize: font.base, fontWeight: "600", color: danger ? colors.danger : colors.textPrimary }}>
-        {label}
-      </Text>
-      {value ? <Text style={{ color: colors.textMuted, fontSize: font.sm, marginRight: 6 }}>{value}</Text> : null}
-      {!danger && <Ionicons name="chevron-forward" size={15} color={colors.textMuted} />}
+      <View style={{ flex: 1 }}>
+        <Text style={{ color: iconColor === "#DC2626" ? "#DC2626" : "#111827", fontSize: 15, fontWeight: "600", marginBottom: subtitle ? 2 : 0 }}>
+          {label}
+        </Text>
+        {subtitle && <Text style={{ color: "#9CA3AF", fontSize: 13 }}>{subtitle}</Text>}
+      </View>
+      <View style={{
+        width: 28, height: 28, borderRadius: 14,
+        backgroundColor: "#F3F4F6", alignItems: "center", justifyContent: "center",
+      }}>
+        <Ionicons name="chevron-forward" size={13} color="#9CA3AF" />
+      </View>
     </Pressable>
   );
 }
@@ -152,36 +236,34 @@ function TeamPickerModal({ visible, selected, onClose, onToggle }: {
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable
-        style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.7)", justifyContent: "flex-end" }}
+        style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" }}
         onPress={onClose}
       >
         <Pressable onPress={() => {}} style={{
-          backgroundColor: colors.card,
+          backgroundColor: "#fff",
           borderTopLeftRadius: 28, borderTopRightRadius: 28,
-          borderTopWidth: 1, borderColor: colors.border,
+          borderTopWidth: StyleSheet.hairlineWidth, borderColor: "#E5E7EB",
           paddingBottom: 40,
         }}>
           <View style={{ alignItems: "center", paddingTop: 12, paddingBottom: 4 }}>
-            <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: colors.border }} />
+            <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: "#E5E7EB" }} />
           </View>
-          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: spacing.xl, paddingVertical: spacing.md }}>
-            <Text style={{ color: colors.textPrimary, fontSize: font.xl, fontWeight: "800" }}>
-              Favourite Teams
-            </Text>
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingVertical: 12 }}>
+            <Text style={{ color: "#111827", fontSize: 20, fontWeight: "800" }}>Favourite Teams</Text>
             <Pressable onPress={onClose} hitSlop={8}>
-              <View style={{ backgroundColor: colors.accent + "20", borderRadius: 20, paddingHorizontal: 14, paddingVertical: 7, borderWidth: 1, borderColor: colors.accent + "40" }}>
-                <Text style={{ color: colors.accent, fontSize: font.sm, fontWeight: "700" }}>Done</Text>
+              <View style={{ backgroundColor: colors.accentDim, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 7 }}>
+                <Text style={{ color: colors.accent, fontSize: 13, fontWeight: "700" }}>Done</Text>
               </View>
             </Pressable>
           </View>
-          <Text style={{ color: colors.textMuted, fontSize: font.sm, paddingHorizontal: spacing.xl, marginBottom: spacing.lg }}>
+          <Text style={{ color: "#9CA3AF", fontSize: 13, paddingHorizontal: 20, marginBottom: 16 }}>
             Tap to add or remove teams
           </Text>
-          <View style={{ flexDirection: "row", flexWrap: "wrap", paddingHorizontal: spacing.lg, gap: spacing.sm }}>
+          <View style={{ flexDirection: "row", flexWrap: "wrap", paddingHorizontal: 16, gap: 8 }}>
             {ALL_TEAMS.map((team) => {
-              const isSelected = selected.includes(team.shortName);
-              const color      = getTeamColor(team.shortName);
-              const logoUrl    = getTeamLogo("", team.shortName);
+              const isSel    = selected.includes(team.shortName);
+              const tc       = getTeamColor(team.shortName);
+              const logoUrl  = getTeamLogo("", team.shortName);
               return (
                 <Pressable
                   key={team.shortName}
@@ -189,29 +271,28 @@ function TeamPickerModal({ visible, selected, onClose, onToggle }: {
                   style={({ pressed }) => ({
                     opacity: pressed ? 0.75 : 1,
                     width: "18%", alignItems: "center", gap: 6,
-                    paddingVertical: spacing.sm, borderRadius: radius.md,
-                    backgroundColor: isSelected ? color + "20" : "transparent",
-                    borderWidth: 1.5,
-                    borderColor: isSelected ? color + "70" : "transparent",
+                    paddingVertical: 8, borderRadius: 10,
+                    backgroundColor: isSel ? tc + "18" : "transparent",
+                    borderWidth: 1.5, borderColor: isSel ? tc + "70" : "transparent",
                   })}
                 >
                   <View style={{
                     width: 46, height: 46, borderRadius: 23,
-                    backgroundColor: color + "18",
-                    borderWidth: 1.5, borderColor: isSelected ? color : color + "40",
+                    backgroundColor: tc + "18",
+                    borderWidth: 1.5, borderColor: isSel ? tc : tc + "40",
                     alignItems: "center", justifyContent: "center",
                   }}>
                     {logoUrl
                       ? <Image source={{ uri: logoUrl }} style={{ width: 30, height: 30 }} resizeMode="contain" />
-                      : <Text style={{ color, fontSize: 11, fontWeight: "800" }}>{team.shortName}</Text>
+                      : <Text style={{ color: tc, fontSize: 11, fontWeight: "800" }}>{team.shortName}</Text>
                     }
                   </View>
-                  <Text style={{ color: isSelected ? color : colors.textMuted, fontSize: 9, fontWeight: "700" }}>
+                  <Text style={{ color: isSel ? tc : "#9CA3AF", fontSize: 9, fontWeight: "700" }}>
                     {team.shortName}
                   </Text>
-                  {isSelected && (
-                    <View style={{ position: "absolute", top: 3, right: 3, width: 14, height: 14, borderRadius: 7, backgroundColor: color, alignItems: "center", justifyContent: "center" }}>
-                      <Ionicons name="checkmark" size={9} color="#FFFFFF" />
+                  {isSel && (
+                    <View style={{ position: "absolute", top: 3, right: 3, width: 14, height: 14, borderRadius: 7, backgroundColor: tc, alignItems: "center", justifyContent: "center" }}>
+                      <Ionicons name="checkmark" size={9} color="#fff" />
                     </View>
                   )}
                 </Pressable>
@@ -227,28 +308,31 @@ function TeamPickerModal({ visible, selected, onClose, onToggle }: {
 // ── Main Screen ───────────────────────────────────────────────
 
 export default function ProfileScreen() {
-  const { profile, user, logout, deleteAccount, refreshProfile, updateFavouriteTeams } = useAuth();
+  const { profile, user, logout, deleteAccount, refreshProfile, updateFavouriteTeams, isAuthenticated } = useAuth();
   const { league } = useLeague();
   const router = useRouter();
+  const { data: predStats } = useMyPredictionStats(isAuthenticated);
 
   const displayName    = profile?.displayName || "Cricket Fan";
-  const phone          = user?.phone?.replace("+91", "") ?? "";
+  const phone          = user?.phone ?? "";
   const favouriteTeams: string[] = profile?.favoriteTeams ?? [];
 
   const memberSince = (() => {
-    // profile.createdAt comes from Supabase profiles table created_at
-    // which may be null for older accounts. Fall back to auth user's created_at.
     const raw = profile?.createdAt || (user as any)?.created_at || '';
-    if (!raw) return "—";
-    try { return new Date(raw).toLocaleDateString("en-IN", { month: "short", year: "numeric" }); }
-    catch { return "—"; }
+    if (!raw) return null;
+    try { return new Date(raw).toLocaleDateString("en-IN", { month: "long", year: "numeric" }); }
+    catch { return null; }
   })();
 
-  const [editing,    setEditing]    = useState(false);
-  const [nameInput,  setNameInput]  = useState(displayName);
-  const [saving,     setSaving]     = useState(false);
-  const [saveMsg,    setSaveMsg]    = useState("");
-  const [pickerOpen, setPickerOpen] = useState(false);
+  const [editing,         setEditing]         = useState(false);
+  const [nameInput,       setNameInput]       = useState(displayName);
+  const [saving,          setSaving]          = useState(false);
+  const [saveMsg,         setSaveMsg]         = useState("");
+  const [pickerOpen,      setPickerOpen]      = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+
+  const avatarUrl    = profile?.avatarUrl ?? null;
+  const hasPredStats = predStats && predStats.total > 0;
 
   async function handleLogout() {
     await logout();
@@ -262,15 +346,11 @@ export default function ProfileScreen() {
       [
         { text: "Cancel", style: "cancel" },
         {
-          text: "Delete",
-          style: "destructive",
+          text: "Delete", style: "destructive",
           onPress: async () => {
-            const result = await deleteAccount();
-            if (result.success) {
-              router.replace("/login");
-            } else {
-              Alert.alert("Error", result.error ?? "Failed to delete account. Please try again.");
-            }
+            const r = await deleteAccount();
+            if (r.success) router.replace("/login");
+            else Alert.alert("Error", r.error ?? "Failed to delete account.");
           },
         },
       ],
@@ -282,8 +362,27 @@ export default function ProfileScreen() {
     setSaving(true);
     const result = await updateProfile(user?.id ?? '', { displayName: nameInput.trim() });
     setSaving(false);
-    if (result.error) { setSaveMsg(result.error); }
+    if (result.error) setSaveMsg(result.error);
     else { setSaveMsg("Saved!"); await refreshProfile(); setEditing(false); }
+  }
+
+  async function handleAvatarPress() {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert("Permission needed", "Allow access to your photo library to set a profile picture.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"], allowsEditing: true, aspect: [1, 1], quality: 0.85,
+    });
+    if (result.canceled || !result.assets[0]) return;
+    const asset = result.assets[0];
+    setUploadingAvatar(true);
+    const { error } = await uploadAvatarImage(asset.uri, asset.mimeType ?? "image/jpeg");
+    setUploadingAvatar(false);
+    if (error) Alert.alert("Upload failed", error);
+    else await refreshProfile();
   }
 
   async function handleToggleTeam(shortName: string) {
@@ -296,239 +395,331 @@ export default function ProfileScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <SafeAreaView style={{ flex: 1 }}>
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: 100 }}
-        >
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
 
-          {/* ── Hero Section ── */}
+          {/* ── Gradient hero ── */}
           <LinearGradient
-            colors={['#3B82F6', '#1D4ED8']}
-            start={{ x: 0, y: 0 }}
+            colors={["#BFDBFE", "#DBEAFE", "#EFF6FF", colors.bg]}
+            start={{ x: 0.2, y: 0 }}
             end={{ x: 1, y: 1 }}
-            style={{
-              paddingHorizontal: spacing.lg,
-              paddingTop: spacing.xl,
-              paddingBottom: spacing.xxl + 36,
-              borderBottomLeftRadius: radius.xxl,
-              borderBottomRightRadius: radius.xxl,
-              overflow: "hidden",
-            }}
+            style={{ paddingTop: 20, paddingBottom: 32, paddingHorizontal: 20, overflow: "hidden" }}
           >
-            {/* Decorative shapes */}
+            {/* Decorative blobs */}
             <View pointerEvents="none" style={{
-              position: "absolute", top: -60, right: -40,
-              width: 170, height: 170, borderRadius: 85,
-              backgroundColor: "rgba(255,255,255,0.08)",
+              position: "absolute", top: -40, right: -40,
+              width: 160, height: 160, borderRadius: 80,
+              backgroundColor: "rgba(37,99,235,0.08)",
             }} />
             <View pointerEvents="none" style={{
-              position: "absolute", bottom: -50, left: -40,
-              width: 140, height: 140, borderRadius: 70,
-              backgroundColor: "rgba(255,255,255,0.06)",
+              position: "absolute", bottom: 0, right: 60,
+              width: 90, height: 90, borderRadius: 45,
+              backgroundColor: "rgba(37,99,235,0.05)",
             }} />
 
-            <Text style={{ color: "rgba(255,255,255,0.7)", fontSize: font.xs, fontWeight: "700", letterSpacing: 2, marginBottom: spacing.xl }}>
-              MY PROFILE
+            {/* Title */}
+            <Text style={{ color: "#1E3A8A", fontSize: 30, fontWeight: "800", letterSpacing: -0.6, marginBottom: 24 }}>
+              Profile
             </Text>
 
             {editing ? (
-              <View style={{ gap: spacing.md }}>
-                <Text style={{ color: "rgba(255,255,255,0.7)", fontSize: font.xs, fontWeight: "700", letterSpacing: 1 }}>DISPLAY NAME</Text>
+              <View style={{ gap: 12 }}>
+                <Text style={{ color: "#3B82F6", fontSize: 10, fontWeight: "700", letterSpacing: 1.5 }}>
+                  DISPLAY NAME
+                </Text>
                 <TextInput
                   value={nameInput}
                   onChangeText={setNameInput}
                   autoFocus
                   placeholder="Your name"
-                  placeholderTextColor={colors.textMuted}
+                  placeholderTextColor="#93C5FD"
                   style={{
-                    color: colors.textPrimary, fontSize: font.lg, fontWeight: "700",
-                    borderRadius: radius.md, paddingHorizontal: 16, paddingVertical: 12,
-                    backgroundColor: "#fff",
+                    color: "#1E3A8A", fontSize: 17, fontWeight: "700",
+                    borderRadius: 12, paddingHorizontal: 16, paddingVertical: 14,
+                    backgroundColor: "rgba(255,255,255,0.8)",
+                    borderWidth: 1.5, borderColor: "#BFDBFE",
                   }}
                 />
                 {saveMsg ? (
-                  <Text style={{ color: saveMsg === "Saved!" ? "#bbf7d0" : "#fecaca", fontSize: font.sm, fontWeight: "600" }}>{saveMsg}</Text>
+                  <Text style={{ color: saveMsg === "Saved!" ? "#16A34A" : "#DC2626", fontSize: 13, fontWeight: "600" }}>
+                    {saveMsg}
+                  </Text>
                 ) : null}
-                <View style={{ flexDirection: "row", gap: spacing.sm }}>
+                <View style={{ flexDirection: "row", gap: 10 }}>
                   <Pressable
                     onPress={() => { setEditing(false); setSaveMsg(""); }}
                     style={({ pressed }) => ({
-                      flex: 1, opacity: pressed ? 0.7 : 1, borderRadius: radius.md,
-                      paddingVertical: 13, backgroundColor: "rgba(255,255,255,0.18)",
-                      borderWidth: 1, borderColor: "rgba(255,255,255,0.3)", alignItems: "center",
+                      flex: 1, opacity: pressed ? 0.6 : 1, borderRadius: 12,
+                      paddingVertical: 14, backgroundColor: "rgba(255,255,255,0.6)",
+                      borderWidth: 1.5, borderColor: "#BFDBFE", alignItems: "center",
                     })}
                   >
-                    <Text style={{ color: "#fff", fontWeight: "700", fontSize: font.sm }}>Cancel</Text>
+                    <Text style={{ color: "#6B7280", fontWeight: "700", fontSize: 14 }}>Cancel</Text>
                   </Pressable>
                   <Pressable
                     onPress={handleSaveName}
                     disabled={saving}
                     style={({ pressed }) => ({
-                      flex: 1, opacity: pressed || saving ? 0.7 : 1,
-                      borderRadius: radius.md, paddingVertical: 13,
-                      backgroundColor: "#fff", alignItems: "center",
+                      flex: 1, opacity: pressed || saving ? 0.7 : 1, borderRadius: 12,
+                      paddingVertical: 14, backgroundColor: colors.accent, alignItems: "center",
                     })}
                   >
                     {saving
-                      ? <ActivityIndicator size="small" color={colors.accent} />
-                      : <Text style={{ color: colors.accent, fontWeight: "800", fontSize: font.sm }}>Save</Text>
+                      ? <ActivityIndicator size="small" color="#fff" />
+                      : <Text style={{ color: "#fff", fontWeight: "800", fontSize: 14 }}>Save</Text>
                     }
                   </Pressable>
                 </View>
               </View>
             ) : (
-              <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.lg }}>
-                <Avatar name={displayName} size={68} onGradient />
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 18 }}>
+                <Avatar
+                  name={displayName}
+                  avatarUrl={avatarUrl}
+                  size={80}
+                  onPress={handleAvatarPress}
+                  uploading={uploadingAvatar}
+                />
                 <View style={{ flex: 1 }}>
-                  <Text style={{ color: "#fff", fontSize: font.xl, fontWeight: "900", letterSpacing: -0.3, marginBottom: 4 }}>
-                    {displayName}
-                  </Text>
-                  <Text style={{ color: "rgba(255,255,255,0.75)", fontSize: font.sm }}>
-                    +91 {phone || "—"}
-                  </Text>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 7, marginBottom: 6, flexWrap: "wrap" }}>
+                    <Text style={{ color: "#1E3A8A", fontSize: 23, fontWeight: "800", letterSpacing: -0.4 }}>
+                      {displayName}
+                    </Text>
+                    <Ionicons name="checkmark-circle" size={18} color="#2563EB" />
+                    <Pressable
+                      onPress={() => { setNameInput(displayName); setSaveMsg(""); setEditing(true); }}
+                      hitSlop={12}
+                      style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1 })}
+                    >
+                      <Ionicons name="pencil-outline" size={15} color="#93C5FD" />
+                    </Pressable>
+                  </View>
+                  {phone ? (
+                    <Text style={{ color: "#1D4ED8", fontSize: 13, fontWeight: "500", marginBottom: 5 }}>
+                      {phone}
+                    </Text>
+                  ) : null}
+                  {memberSince && (
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+                      <Ionicons name="calendar-outline" size={12} color="#60A5FA" />
+                      <Text style={{ color: "#3B82F6", fontSize: 12, fontWeight: "500" }}>
+                        Member since {memberSince}
+                      </Text>
+                    </View>
+                  )}
                 </View>
-                <Pressable
-                  onPress={() => { setNameInput(displayName); setSaveMsg(""); setEditing(true); }}
-                  style={({ pressed }) => ({
-                    opacity: pressed ? 0.7 : 1,
-                    width: 40, height: 40, borderRadius: 12,
-                    backgroundColor: "rgba(255,255,255,0.18)",
-                    borderWidth: 1, borderColor: "rgba(255,255,255,0.3)",
-                    alignItems: "center", justifyContent: "center",
-                  })}
-                >
-                  <Ionicons name="pencil-outline" size={16} color="#fff" />
-                </Pressable>
               </View>
             )}
           </LinearGradient>
 
-          {/* Floating stats card */}
-          {!editing && (
-            <View style={{
-              flexDirection: "row", marginHorizontal: spacing.lg, marginTop: -32,
-              backgroundColor: colors.card,
-              borderRadius: radius.lg, padding: spacing.lg,
-              ...cardShadow,
-            }}>
-              <StatBox icon="heart" value={favouriteTeams.length || "—"} label="Fav Teams" color={colors.accent} />
-              <View style={{ width: 1, backgroundColor: colors.border, marginVertical: 4 }} />
-              <StatBox icon="trophy" value={league.short} label="League" color={colors.warning} />
-              <View style={{ width: 1, backgroundColor: colors.border, marginVertical: 4 }} />
-              <StatBox icon="calendar" value={memberSince} label="Joined" color={colors.success} />
+          <View style={{ paddingHorizontal: 20, gap: 28, marginTop: 24 }}>
+
+            {/* ── Stats card ── */}
+            <View style={{ ...card, paddingVertical: 24, paddingHorizontal: 8 }}>
+              <View style={{ flexDirection: "row", alignItems: "center" }}>
+                <StatCol
+                  icon="heart"           iconColor="#3B82F6" bg="#EFF6FF"
+                  value={favouriteTeams.length || "—"} label="Fav Teams"   divider
+                />
+                <StatCol
+                  icon="trophy"          iconColor="#8B5CF6" bg="#F5F3FF"
+                  value={league.short}                  label="League"     divider
+                />
+                <StatCol
+                  icon="radio-button-on" iconColor="#16A34A" bg="#F0FDF4"
+                  value={hasPredStats ? `${predStats.accuracy}%` : "—"} label="Accuracy" divider
+                />
+                <StatCol
+                  icon="flame"           iconColor="#EA580C" bg="#FFF7ED"
+                  value={hasPredStats ? predStats.total : "—"}           label="Total Predictions"
+                />
+              </View>
             </View>
-          )}
 
-          <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.xl }}>
+            {/* ── Prediction Record ── */}
+            <View>
+              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+                <Text style={{ color: "#111827", fontSize: 18, fontWeight: "700", letterSpacing: -0.2 }}>
+                  Prediction Record
+                </Text>
+                <Pressable
+                  onPress={() => router.push("/(settings)/my-predictions")}
+                  hitSlop={8}
+                  style={({ pressed }) => ({
+                    opacity: pressed ? 0.6 : 1,
+                    flexDirection: "row", alignItems: "center", gap: 3,
+                    backgroundColor: "#EFF6FF", borderRadius: 20,
+                    paddingHorizontal: 10, paddingVertical: 5,
+                  })}
+                >
+                  <Text style={{ color: colors.accent, fontSize: 12, fontWeight: "700" }}>View all</Text>
+                  <Ionicons name="chevron-forward" size={12} color={colors.accent} />
+                </Pressable>
+              </View>
+              <View style={{ ...card, paddingVertical: 24, paddingHorizontal: 8 }}>
+                {hasPredStats ? (
+                  <View style={{ flexDirection: "row", alignItems: "center" }}>
+                    <StatCol icon="checkmark-circle" iconColor="#16A34A" bg="#F0FDF4" value={predStats.correct}      label="Correct"  divider />
+                    <StatCol icon="close-circle"     iconColor="#DC2626" bg="#FEF2F2" value={predStats.wrong}        label="Wrong"    divider />
+                    <StatCol icon="time"             iconColor="#D97706" bg="#FFFBEB" value={predStats.pending ?? 0} label="Pending"  divider />
+                    <StatCol icon="bar-chart"        iconColor="#9CA3AF" bg="#F9FAFB" value={predStats.total}        label="Total" />
+                  </View>
+                ) : (
+                  <Pressable
+                    onPress={() => router.push("/(settings)/my-predictions")}
+                    style={({ pressed }) => ({
+                      opacity: pressed ? 0.7 : 1,
+                      alignItems: "center", paddingVertical: 20, gap: 8,
+                    })}
+                  >
+                    <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: "#F9FAFB", alignItems: "center", justifyContent: "center" }}>
+                      <Ionicons name="trophy-outline" size={26} color="#D1D5DB" />
+                    </View>
+                    <Text style={{ color: "#9CA3AF", fontSize: 13, textAlign: "center" }}>
+                      No predictions yet — make your first pick!
+                    </Text>
+                  </Pressable>
+                )}
+              </View>
+            </View>
 
-            {/* ── Favourite Teams ── */}
-            <Text style={{ color: colors.textMuted, fontSize: 11, fontWeight: "700", letterSpacing: 1.5, marginBottom: spacing.md }}>
-              FAVOURITE TEAMS
-            </Text>
-            <View style={{
-              backgroundColor: colors.card,
-              borderRadius: radius.xl, borderWidth: 1, borderColor: colors.border,
-              padding: spacing.lg, marginBottom: spacing.xl,
-              ...cardShadow,
-            }}>
+            {/* ── Favourite Team ── */}
+            <View>
+              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+                <Text style={{ color: "#111827", fontSize: 18, fontWeight: "700", letterSpacing: -0.2 }}>
+                  Favourite Team
+                </Text>
+                <Pressable
+                  onPress={() => setPickerOpen(true)}
+                  hitSlop={8}
+                  style={({ pressed }) => ({
+                    opacity: pressed ? 0.6 : 1,
+                    backgroundColor: "#EFF6FF", borderRadius: 20,
+                    paddingHorizontal: 12, paddingVertical: 5,
+                  })}
+                >
+                  <Text style={{ color: colors.accent, fontSize: 12, fontWeight: "700" }}>
+                    {favouriteTeams.length > 0 ? "Edit" : "Add"}
+                  </Text>
+                </Pressable>
+              </View>
+
               {favouriteTeams.length === 0 ? (
                 <Pressable
                   onPress={() => setPickerOpen(true)}
                   style={({ pressed }) => ({
                     opacity: pressed ? 0.7 : 1,
-                    alignItems: "center", paddingVertical: spacing.lg, gap: spacing.sm,
+                    ...card,
+                    flexDirection: "row", alignItems: "center",
+                    padding: 20, gap: 16,
                   })}
                 >
                   <View style={{
-                    width: 56, height: 56, borderRadius: 28,
-                    backgroundColor: colors.accentDim,
-                    borderWidth: 1.5, borderColor: colors.accent + "30", borderStyle: "dashed",
+                    width: 52, height: 52, borderRadius: 26,
+                    backgroundColor: "#EFF6FF",
+                    borderWidth: 1.5, borderColor: "#BFDBFE", borderStyle: "dashed",
                     alignItems: "center", justifyContent: "center",
                   }}>
                     <Ionicons name="add" size={24} color={colors.accent} />
                   </View>
-                  <Text style={{ color: colors.textPrimary, fontSize: font.sm, fontWeight: "600" }}>
-                    Add your favourite teams
-                  </Text>
-                  <Text style={{ color: colors.textMuted, fontSize: font.xs }}>
-                    Get personalised predictions & news
-                  </Text>
+                  <View>
+                    <Text style={{ color: "#374151", fontSize: 15, fontWeight: "600", marginBottom: 3 }}>
+                      Add your favourite teams
+                    </Text>
+                    <Text style={{ color: "#9CA3AF", fontSize: 13 }}>
+                      Get personalised predictions & news
+                    </Text>
+                  </View>
                 </Pressable>
               ) : (
-                <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: spacing.md }}>
-                  {favouriteTeams.map((shortName) => (
-                    <View key={shortName} style={{ alignItems: "center", gap: 6 }}>
-                      <TeamCircle shortName={shortName} size={52} />
-                      <Text style={{ color: colors.textMuted, fontSize: 10, fontWeight: "600" }}>{shortName}</Text>
-                    </View>
+                <View style={{ ...card, overflow: "hidden" }}>
+                  {favouriteTeams.map((sn, i) => (
+                    <TeamRow
+                      key={sn} shortName={sn}
+                      last={i === favouriteTeams.length - 1}
+                      onPress={() => setPickerOpen(true)}
+                    />
                   ))}
-                  <Pressable
-                    onPress={() => setPickerOpen(true)}
-                    style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1, alignItems: "center", gap: 6 })}
-                  >
-                    <View style={{
-                      width: 52, height: 52, borderRadius: 26,
-                      borderWidth: 1.5, borderColor: colors.border, borderStyle: "dashed",
-                      alignItems: "center", justifyContent: "center",
-                    }}>
-                      <Ionicons name="pencil-outline" size={18} color={colors.textMuted} />
-                    </View>
-                    <Text style={{ color: colors.textMuted, fontSize: 10, fontWeight: "600" }}>Edit</Text>
-                  </Pressable>
                 </View>
               )}
             </View>
 
-            {/* ── Account ── */}
-            <Text style={{ color: colors.textMuted, fontSize: 11, fontWeight: "700", letterSpacing: 1.5, marginBottom: spacing.md }}>
-              ACCOUNT
-            </Text>
-            <View style={{ borderRadius: radius.xl, marginBottom: spacing.xl, ...cardShadow }}>
-              <View style={{
-                backgroundColor: colors.card,
-                borderRadius: radius.xl, borderWidth: 1, borderColor: colors.border,
-                overflow: "hidden",
-              }}>
-                <SettingsRow icon="notifications-outline"   label="Notifications"    onPress={() => router.push("/(settings)/notifications")} />
-                <SettingsRow icon="shield-checkmark-outline" label="Privacy & Security" onPress={() => router.push("/(settings)/privacy")} />
-                <SettingsRow icon="help-circle-outline"      label="Help & Support"   onPress={() => router.push("/(settings)/help")} last />
+            {/* ── Account Settings ── */}
+            <View>
+              <Text style={{ color: "#111827", fontSize: 18, fontWeight: "700", letterSpacing: -0.2, marginBottom: 14 }}>
+                Account Settings
+              </Text>
+              <View style={{ ...card, overflow: "hidden" }}>
+                <SettingsRow
+                  icon="notifications-outline"
+                  iconColor="#F97316" iconBg="#FFF7ED"
+                  label="Notifications"
+                  subtitle="Manage your alerts and updates"
+                  onPress={() => router.push("/(settings)/notifications")}
+                />
+                <SettingsRow
+                  icon="shield-checkmark-outline"
+                  iconColor="#2563EB" iconBg="#EFF6FF"
+                  label="Privacy & Security"
+                  subtitle="Manage your privacy and security"
+                  onPress={() => router.push("/(settings)/privacy")}
+                />
+                <SettingsRow
+                  icon="headset-outline"
+                  iconColor="#16A34A" iconBg="#F0FDF4"
+                  label="Help & Support"
+                  subtitle="Get help and contact support"
+                  onPress={() => router.push("/(settings)/help")}
+                />
+                <SettingsRow
+                  icon="log-out-outline"
+                  iconColor="#DC2626" iconBg="#FEF2F2"
+                  label="Log Out"
+                  subtitle="Sign out from your account"
+                  onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); handleLogout(); }}
+                  last
+                />
               </View>
             </View>
 
-            {/* ── Delete Account ── */}
-            <Pressable
-              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy); handleDeleteAccount(); }}
-              style={({ pressed }) => ({
-                opacity: pressed ? 0.75 : 1,
-                flexDirection: "row", alignItems: "center", justifyContent: "center",
-                gap: spacing.sm, backgroundColor: "transparent",
-                borderRadius: radius.xl, paddingVertical: 14,
-                marginBottom: spacing.sm,
-              })}
-            >
-              <Ionicons name="trash-outline" size={16} color={colors.textMuted} />
-              <Text style={{ color: colors.textMuted, fontSize: font.sm, fontWeight: "600" }}>Delete Account</Text>
-            </Pressable>
+            {/* ── Footer ── */}
+            <View style={{ alignItems: "center", gap: 20, paddingTop: 8 }}>
+              {/* Branded version badge */}
+              <View style={{
+                flexDirection: "row", alignItems: "center", gap: 8,
+                backgroundColor: "#fff",
+                borderRadius: 24, paddingHorizontal: 16, paddingVertical: 10,
+                borderWidth: StyleSheet.hairlineWidth, borderColor: "#E5E7EB",
+                ...Platform.select({
+                  ios: { shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 4 },
+                  android: { elevation: 1 },
+                  default: {},
+                }),
+              }}>
+                <View style={{
+                  width: 22, height: 22, borderRadius: 11,
+                  backgroundColor: colors.accent,
+                  alignItems: "center", justifyContent: "center",
+                }}>
+                  <Ionicons name="flash" size={12} color="#fff" />
+                </View>
+                <Text style={{ color: "#6B7280", fontSize: 12, fontWeight: "600" }}>PredictX</Text>
+                <View style={{ width: 3, height: 3, borderRadius: 1.5, backgroundColor: "#D1D5DB" }} />
+                <Text style={{ color: "#9CA3AF", fontSize: 12 }}>v1.0.0</Text>
+              </View>
 
-            {/* ── Sign Out ── */}
-            <Pressable
-              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); handleLogout(); }}
-              style={({ pressed }) => ({
-                opacity: pressed ? 0.75 : 1,
-                flexDirection: "row", alignItems: "center", justifyContent: "center",
-                gap: spacing.sm, backgroundColor: colors.danger + "10",
-                borderRadius: radius.xl, paddingVertical: 16,
-                borderWidth: 1, borderColor: colors.danger + "25",
-                marginBottom: spacing.xl,
-              })}
-            >
-              <Ionicons name="log-out-outline" size={18} color={colors.danger} />
-              <Text style={{ color: colors.danger, fontSize: font.base, fontWeight: "700" }}>Sign Out</Text>
-            </Pressable>
+              {/* Delete account — subtle, not prominent */}
+              <Pressable
+                onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy); handleDeleteAccount(); }}
+                style={({ pressed }) => ({
+                  opacity: pressed ? 0.5 : 1,
+                  flexDirection: "row", alignItems: "center", gap: 6,
+                })}
+              >
+                <Ionicons name="trash-outline" size={13} color="#D1D5DB" />
+                <Text style={{ color: "#D1D5DB", fontSize: 12, fontWeight: "500" }}>Delete Account</Text>
+              </Pressable>
+            </View>
 
-            <Text style={{ color: colors.textMuted, fontSize: font.xs, textAlign: "center" }}>
-              PredictX v1.0.0
-            </Text>
           </View>
         </ScrollView>
       </SafeAreaView>

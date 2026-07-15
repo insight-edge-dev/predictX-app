@@ -6,16 +6,19 @@
  */
 
 import {
-  View, Text, TextInput, Pressable, FlatList,
+  View, Text, TextInput, Pressable,
   Image, ActivityIndicator, Keyboard,
 } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'expo-router';
+import { safeBack } from '@/utils/navigation';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
 import api from '@/services/api';
 import { getLeagueMatches } from '@/services/matchService';
+import { useLeague } from '@/contexts/LeagueContext';
 import { colors, spacing, font, radius } from '@/constants/theme';
 
 // ── Types ─────────────────────────────────────────────────────
@@ -170,6 +173,7 @@ function EmptyState({ query, tab }: { query: string; tab: Tab }) {
 
 export default function SearchScreen() {
   const router      = useRouter();
+  const { league: activeLeague } = useLeague();
   const inputRef    = useRef<TextInput>(null);
   const [query, setQuery]   = useState('');
   const [activeTab, setTab] = useState<Tab>('Players');
@@ -200,8 +204,9 @@ export default function SearchScreen() {
   useEffect(() => {
     if (activeTab !== 'Venues') return;
 
-    // Pull venues from cached match data
-    getLeagueMatches('ipl').then(data => {
+    // Pull venues from cached match data for the active cricket league
+    const venueLeague = activeLeague?.sport === 'cricket' ? (activeLeague.id ?? 'ipl') : 'ipl';
+    getLeagueMatches(venueLeague).then(data => {
       const all = [...(data?.live ?? []), ...(data?.upcoming ?? []), ...(data?.completed ?? [])];
       const seen = new Set<string>();
       const venues: VenueResult[] = [];
@@ -220,7 +225,7 @@ export default function SearchScreen() {
         : venues,
       );
     }).catch(() => setVenueResults([]));
-  }, [activeTab, debounced]);
+  }, [activeTab, debounced, activeLeague]);
 
   const clearQuery = useCallback(() => {
     setQuery('');
@@ -245,7 +250,7 @@ export default function SearchScreen() {
         }}
       >
         <Pressable
-          onPress={() => { Keyboard.dismiss(); router.back(); }}
+          onPress={() => { Keyboard.dismiss(); safeBack(); }}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
           <Ionicons name="chevron-back" size={22} color={colors.textPrimary} />
@@ -324,7 +329,7 @@ export default function SearchScreen() {
         </View>
       ) : activeTab === 'Players' ? (
         playerResults.length > 0 ? (
-          <FlatList
+          <FlashList
             data={playerResults}
             keyExtractor={item => item.id}
             renderItem={({ item }) => (
@@ -336,6 +341,7 @@ export default function SearchScreen() {
                 }}
               />
             )}
+            estimatedItemSize={64}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           />
@@ -344,7 +350,7 @@ export default function SearchScreen() {
         )
       ) : (
         venueResults.length > 0 ? (
-          <FlatList
+          <FlashList
             data={venueResults}
             keyExtractor={(item, i) => item.venueId ?? item.name ?? String(i)}
             renderItem={({ item }) => (
@@ -357,6 +363,7 @@ export default function SearchScreen() {
                 }}
               />
             )}
+            estimatedItemSize={64}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           />
