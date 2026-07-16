@@ -20,7 +20,6 @@
         "NSCameraUsageDescription": "PredictX uses the camera to capture your profile picture."
       }
     },
-    "newArchEnabled": true,
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#F8F9FB",
