@@ -14,6 +14,16 @@
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFuZ2Nma2VidWxwZWlkZWl0ZGtwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ1MDM1ODAsImV4cCI6MjA5MDA3OTU4MH0.pGiZait2FRt2U70OHl45_NQBYmyDcXGF7rWZHzi5mP4"
       }
     },
+    "vps": {
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://api.predictxsports.com",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://qngcfkebulpeideitdkp.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFuZ2Nma2VidWxwZWlkZWl0ZGtwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ1MDM1ODAsImV4cCI6MjA5MDA3OTU4MH0.pGiZait2FRt2U70OHl45_NQBYmyDcXGF7rWZHzi5mP4"
+      }
+    },
     "production": {
       "android": {
         "buildType": "app-bundle"
