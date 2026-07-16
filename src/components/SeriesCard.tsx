@@ -18,14 +18,19 @@ import { usePress } from '@/hooks/usePress';
 
 function TeamBadge({ name, logo, size = 40 }: { name: string; logo: string; size?: number }) {
   const color = getTeamColor(name);
+  const circle = {
+    width: size, height: size, borderRadius: size / 2,
+    alignItems: 'center' as const, justifyContent: 'center' as const, overflow: 'hidden' as const,
+  };
   if (logo) {
-    return <Image source={{ uri: logo }} style={{ width: size, height: size }} contentFit="contain" />;
+    return (
+      <View style={{ ...circle, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E5E7EB' }}>
+        <Image source={{ uri: logo }} style={{ width: size * 0.74, height: size * 0.74 }} contentFit="contain" />
+      </View>
+    );
   }
   return (
-    <View style={{
-      width: size, height: size, borderRadius: size / 2,
-      backgroundColor: color + '18', alignItems: 'center', justifyContent: 'center',
-    }}>
+    <View style={{ ...circle, backgroundColor: color + '18' }}>
       <Text style={{ color, fontSize: size * 0.34, fontWeight: '700' }}>{(name || '?').slice(0, 2)}</Text>
     </View>
   );
@@ -34,7 +39,15 @@ function TeamBadge({ name, logo, size = 40 }: { name: string; logo: string; size
 function SmallTeamBadge({ name, logo }: { name: string; logo: string }) {
   const color = getTeamColor(name);
   if (logo) {
-    return <Image source={{ uri: logo }} style={{ width: 24, height: 24 }} contentFit="contain" />;
+    return (
+      <View style={{
+        width: 24, height: 24, borderRadius: 12,
+        backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E5E7EB',
+        alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
+      }}>
+        <Image source={{ uri: logo }} style={{ width: 17, height: 17 }} contentFit="contain" />
+      </View>
+    );
   }
   return (
     <View style={{

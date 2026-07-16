@@ -17,18 +17,19 @@ interface NextMatchCardProps {
 function TeamLogo({ imageId, shortName, size }: { imageId: string; shortName: string; size: number }) {
   const logoUrl = getTeamLogo(imageId, shortName);
   const color = getTeamColor(shortName);
+  const circle = {
+    width: size, height: size, borderRadius: size / 2,
+    alignItems: "center" as const, justifyContent: "center" as const, overflow: "hidden" as const,
+  };
   if (logoUrl) {
     return (
-      <Image source={{ uri: logoUrl }} style={{ width: size, height: size }} resizeMode="contain" />
+      <View style={{ ...circle, backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: "#E5E7EB" }}>
+        <Image source={{ uri: logoUrl }} style={{ width: size * 0.74, height: size * 0.74 }} resizeMode="contain" />
+      </View>
     );
   }
   return (
-    <View
-      style={{
-        width: size, height: size, borderRadius: size / 2,
-        backgroundColor: color + "20", alignItems: "center", justifyContent: "center",
-      }}
-    >
+    <View style={{ ...circle, backgroundColor: color + "20" }}>
       <Text style={{ color, fontSize: size * 0.32, fontWeight: "700" }}>{shortName}</Text>
     </View>
   );

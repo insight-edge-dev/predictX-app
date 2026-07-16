@@ -15,7 +15,7 @@ import { colors, spacing, font, radius } from '@/constants/theme';
 import api from '@/services/api';
 import { useNotificationBadge } from '@/contexts/NotificationBadgeContext';
 import { PageLoader } from '@/components/PageLoader';
-import { requestPushPermissionAndRegister } from '@/hooks/usePushNotifications';
+import { requestPushPermissionAndRegister, getPermissionStatus } from '@/hooks/usePushNotifications';
 import { useAuth } from '@/contexts/AuthContext';
 
 const DISMISSED_KEY = 'dismissed_notifications';
@@ -273,8 +273,26 @@ interface NotifPrefs {
   adminBroadcasts:   boolean;
 }
 
+const NOTIF_ROWS: { key: keyof NotifPrefs; label: string; sub: string; icon: string }[] = [
+  { key: 'matchAlerts',       icon: 'alarm-outline',      label: 'Match Alerts',       sub: 'Notify 30 min before a match starts'   },
+  { key: 'predictionResults', icon: 'ribbon-outline',     label: 'Prediction Results', sub: 'Know when your prediction is resolved' },
+  { key: 'liveScore',         icon: 'radio-outline',      label: 'Live Score Alerts',  sub: 'Wicket milestones during live matches' },
+  { key: 'adminBroadcasts',   icon: 'megaphone-outline',  label: 'App Announcements',  sub: 'Important updates from PredictX'      },
+];
+
 function PushPrefsSection() {
   const { isAuthenticated } = useAuth();
+  const [permStatus, setPermStatus] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    getPermissionStatus().then(status => setPermStatus(status));
+  }, []);
+
+  const handleEnable = async () => {
+    await requestPushPermissionAndRegister();
+    getPermissionStatus().then(status => setPermStatus(status));
+  };
 
   const { data: prefs } = useQuery<NotifPrefs>({
     queryKey: ['notification-prefs'],
@@ -282,8 +300,6 @@ function PushPrefsSection() {
     enabled:  isAuthenticated,
     staleTime: 60_000,
   });
-
-  const queryClient = useQueryClient();
 
   const { mutate: updatePref } = useMutation({
     mutationFn: (patch: Partial<NotifPrefs>) => api.put('/user/notification-prefs', patch),
@@ -300,30 +316,64 @@ function PushPrefsSection() {
 
   if (!isAuthenticated) return null;
 
-  const ROWS: { key: keyof NotifPrefs; label: string; sub: string }[] = [
-    { key: 'matchAlerts',       label: 'Match Alerts',        sub: 'Notify 30 min before a match starts'    },
-    { key: 'predictionResults', label: 'Prediction Results',  sub: 'Know when your prediction is resolved'  },
-    { key: 'liveScore',         label: 'Live Score Alerts',   sub: 'Wicket milestones during live matches'  },
-    { key: 'adminBroadcasts',   label: 'App Announcements',   sub: 'Important updates from PredictX'       },
-  ];
+  const isGranted = permStatus === 'granted';
 
   return (
     <View style={{ marginHorizontal: spacing.lg, marginBottom: spacing.xl }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.md }}>
-        <Text style={{ color: colors.textPrimary, fontSize: font.base, fontWeight: '700' }}>Push Notifications</Text>
+
+      {/* Enable banner — only shown when permission not yet granted */}
+      {permStatus !== null && !isGranted && (
         <Pressable
-          onPress={() => requestPushPermissionAndRegister()}
-          style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
+          onPress={handleEnable}
+          style={({ pressed }) => ({
+            opacity: pressed ? 0.88 : 1,
+            flexDirection: 'row', alignItems: 'center', gap: spacing.md,
+            backgroundColor: colors.accent,
+            borderRadius: radius.lg,
+            padding: spacing.lg,
+            marginBottom: spacing.md,
+          })}
         >
-          <Text style={{ color: colors.accent, fontSize: font.xs, fontWeight: '700' }}>Enable</Text>
+          <View style={{
+            width: 44, height: 44, borderRadius: 12,
+            backgroundColor: 'rgba(255,255,255,0.18)',
+            alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+          }}>
+            <Ionicons name="notifications" size={22} color="#fff" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: '#fff', fontSize: font.sm, fontWeight: '800', marginBottom: 2 }}>Enable Push Notifications</Text>
+            <Text style={{ color: 'rgba(255,255,255,0.75)', fontSize: font.xs, lineHeight: 16 }}>Tap to get match alerts and live updates</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.7)" />
         </Pressable>
+      )}
+
+      {/* Section header */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.md }}>
+        <Text style={{ color: colors.textPrimary, fontSize: font.base, fontWeight: '700' }}>Notification Types</Text>
+        {isGranted && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#DCFCE7', borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4 }}>
+            <Ionicons name="checkmark-circle" size={13} color="#16A34A" />
+            <Text style={{ color: '#16A34A', fontSize: 11, fontWeight: '700' }}>Active</Text>
+          </View>
+        )}
       </View>
 
+      {/* Preference rows */}
       <View style={{ backgroundColor: colors.card, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, overflow: 'hidden' }}>
-        {ROWS.map((row, idx) => (
+        {NOTIF_ROWS.map((row, idx) => (
           <View key={row.key}>
             {idx > 0 && <View style={{ height: 1, backgroundColor: colors.border, marginHorizontal: spacing.lg }} />}
-            <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.lg, paddingVertical: spacing.md, gap: spacing.md }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.lg, paddingVertical: 14, gap: spacing.md }}>
+              {/* Icon chip */}
+              <View style={{
+                width: 38, height: 38, borderRadius: 10,
+                backgroundColor: colors.accentDim,
+                alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+              }}>
+                <Ionicons name={row.icon as any} size={18} color={colors.accent} />
+              </View>
               <View style={{ flex: 1 }}>
                 <Text style={{ color: colors.textPrimary, fontSize: font.sm, fontWeight: '600', marginBottom: 2 }}>{row.label}</Text>
                 <Text style={{ color: colors.textMuted, fontSize: font.xs, lineHeight: 16 }}>{row.sub}</Text>
@@ -332,7 +382,7 @@ function PushPrefsSection() {
                 value={prefs?.[row.key] ?? true}
                 onValueChange={(v) => updatePref({ [row.key]: v })}
                 trackColor={{ false: colors.border, true: colors.accent + '60' }}
-                thumbColor={prefs?.[row.key] ? colors.accent : colors.textMuted}
+                thumbColor={prefs?.[row.key] ? colors.accent : '#fff'}
                 ios_backgroundColor={colors.border}
               />
             </View>

@@ -366,7 +366,7 @@ function EmptyState() {
 
 // ── Header ────────────────────────────────────────────────────
 
-function Header({ count }: { count: number }) {
+function Header({ count, seasonEnded }: { count: number; seasonEnded?: boolean }) {
   const { league, clearLeagueSelection } = useLeague();
   const isIPL = league.id === 'ipl';
   const { data: accuracy } = useAccuracy(league.id);
@@ -404,6 +404,22 @@ function Header({ count }: { count: number }) {
           </Text>
         )}
       </View>
+
+      {/* Season ended notice */}
+      {seasonEnded && (
+        <View style={{
+          flexDirection: 'row', alignItems: 'center', gap: 8,
+          backgroundColor: '#FEF9C3', borderRadius: radius.md,
+          borderWidth: 1, borderColor: '#FDE047',
+          paddingHorizontal: spacing.md, paddingVertical: 10,
+          marginTop: spacing.md,
+        }}>
+          <Ionicons name="trophy-outline" size={14} color="#B45309" />
+          <Text style={{ flex: 1, color: '#92400E', fontSize: font.xs, fontWeight: '600', lineHeight: 18 }}>
+            {league.short} {league.season} has ended — showing past predictions
+          </Text>
+        </View>
+      )}
     </View>
   );
 }
@@ -429,7 +445,7 @@ function LeagueBadge({ size = 88 }: { size?: number }) {
 // ── Season ended state ────────────────────────────────────────
 
 function SeasonEndedState() {
-  const { league, setLeagueId } = useLeague();
+  const { league, clearLeagueSelection } = useLeague();
   return (
     <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xxl, paddingBottom: 60 }}>
       <LeagueBadge />
@@ -457,7 +473,7 @@ function SeasonEndedState() {
       </Text>
 
       <Pressable
-        onPress={() => setLeagueId('ipl')}
+        onPress={clearLeagueSelection}
         style={({ pressed }) => ({
           opacity: pressed ? 0.8 : 1,
           backgroundColor: colors.accent, borderRadius: radius.md,
@@ -465,8 +481,8 @@ function SeasonEndedState() {
           flexDirection: 'row', alignItems: 'center', gap: 8,
         })}
       >
-        <Text style={{ color: '#FFFFFF', fontSize: font.base, fontWeight: '800' }}>View IPL Predictions</Text>
-        <Ionicons name="arrow-forward" size={16} color="#FFFFFF" />
+        <Ionicons name="grid-outline" size={16} color="#FFFFFF" />
+        <Text style={{ color: '#FFFFFF', fontSize: font.base, fontWeight: '800' }}>Browse All Predictions</Text>
       </Pressable>
     </View>
   );
@@ -558,7 +574,10 @@ function CricketTipsScreen() {
   const { data: matches = [], isLoading, isFetching } = useTipsList();
   const showSkeleton = isLoading || (isFetching && matches.length === 0);
 
-  if (seasonEnded) {
+  // Season ended but predictions exist → show them with a banner
+  // Season ended and no data yet (loading) → wait for data before deciding
+  // Season ended and truly no predictions → show the dead-end screen
+  if (seasonEnded && !isLoading && matches.length === 0) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.bg }}>
         <SafeAreaView style={{ flex: 1 }}>
@@ -588,7 +607,7 @@ function CricketTipsScreen() {
           keyExtractor={(m) => String(m.id)}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingHorizontal: spacing.lg, paddingBottom: 100 }}
-          ListHeaderComponent={<Header count={showSkeleton ? 0 : matches.length} />}
+          ListHeaderComponent={<Header count={showSkeleton ? 0 : matches.length} seasonEnded={seasonEnded} />}
           ListEmptyComponent={
             showSkeleton ? (
               <><PredictionCardSkeleton /><PredictionCardSkeleton /><PredictionCardSkeleton /></>

@@ -61,23 +61,25 @@ function TeamLogo({ logo, shortName, size }: { logo: string; shortName: string; 
   const url   = getTeamLogo(logo, shortName);
   const color = getTeamColor(shortName);
 
+  const circleStyle = {
+    width: size, height: size, borderRadius: size / 2,
+    alignItems: 'center' as const, justifyContent: 'center' as const,
+    overflow: 'hidden' as const,
+  };
+
   if (url) {
     return (
-      <Image
-        source={{ uri: url }}
-        style={{ width: size, height: size }}
-        contentFit="contain"
-      />
+      <View style={{ ...circleStyle, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E5E7EB' }}>
+        <Image
+          source={{ uri: url }}
+          style={{ width: size * 0.74, height: size * 0.74 }}
+          contentFit="contain"
+        />
+      </View>
     );
   }
   return (
-    <View
-      style={{
-        width: size, height: size, borderRadius: size / 2,
-        backgroundColor: color + '18',
-        alignItems: 'center', justifyContent: 'center',
-      }}
-    >
+    <View style={{ ...circleStyle, backgroundColor: color + '18' }}>
       <Text style={{ color, fontSize: size * 0.32, fontWeight: '700' }}>
         {(shortName || '?').slice(0, 2)}
       </Text>
@@ -472,7 +474,17 @@ export const FeaturedMatchCard = memo(function FeaturedMatchCard({
               {/* Team 1 */}
               <View style={{ flex: 1, alignItems: 'center', gap: spacing.sm }}>
                 {logo1 ? (
-                  <Image source={{ uri: logo1 }} style={{ width: 56, height: 56 }} contentFit="contain" />
+                  <View
+                    style={{
+                      width: 56, height: 56, borderRadius: 28,
+                      backgroundColor: '#FFFFFF',
+                      borderWidth: 1, borderColor: '#E5E7EB',
+                      alignItems: 'center', justifyContent: 'center',
+                      overflow: 'hidden',
+                    }}
+                  >
+                    <Image source={{ uri: logo1 }} style={{ width: 40, height: 40 }} contentFit="contain" />
+                  </View>
                 ) : (
                   <View
                     style={{
@@ -524,7 +536,17 @@ export const FeaturedMatchCard = memo(function FeaturedMatchCard({
               {/* Team 2 */}
               <View style={{ flex: 1, alignItems: 'center', gap: spacing.sm }}>
                 {logo2 ? (
-                  <Image source={{ uri: logo2 }} style={{ width: 56, height: 56 }} contentFit="contain" />
+                  <View
+                    style={{
+                      width: 56, height: 56, borderRadius: 28,
+                      backgroundColor: '#FFFFFF',
+                      borderWidth: 1, borderColor: '#E5E7EB',
+                      alignItems: 'center', justifyContent: 'center',
+                      overflow: 'hidden',
+                    }}
+                  >
+                    <Image source={{ uri: logo2 }} style={{ width: 40, height: 40 }} contentFit="contain" />
+                  </View>
                 ) : (
                   <View
                     style={{

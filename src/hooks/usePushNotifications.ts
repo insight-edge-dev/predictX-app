@@ -1,24 +1,35 @@
 import { useEffect, useRef } from 'react';
-import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 import { useRouter } from 'expo-router';
 import api from '@/services/api';
 
-// Show banners while app is in foreground
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert:  true,
-    shouldShowBanner: true,
-    shouldShowList:   true,
-    shouldPlaySound:  true,
-    shouldSetBadge:   false,
-  }),
-});
+// expo-notifications crashes at module init time in Expo Go (SDK 53+).
+// Static `import` always runs — so we lazy-require instead.
+// In Expo Go the require() call is never reached → no crash.
+type N = typeof import('expo-notifications');
+
+const isExpoGo = Constants.appOwnership === 'expo';
+
+const Notifications: N | null = isExpoGo
+  ? null
+  : (() => { try { return require('expo-notifications') as N; } catch { return null; } })();
+
+if (Notifications) {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert:  true,
+      shouldShowBanner: true,
+      shouldShowList:   true,
+      shouldPlaySound:  true,
+      shouldSetBadge:   false,
+    }),
+  });
+}
 
 export async function requestPushPermissionAndRegister(): Promise<void> {
-  if (!Device.isDevice) return; // skip emulator / web
+  if (!Notifications || !Device.isDevice) return;
 
   const { status: existing } = await Notifications.getPermissionsAsync();
   let status = existing;
@@ -32,39 +43,39 @@ export async function requestPushPermissionAndRegister(): Promise<void> {
 
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync('default', {
-      name:              'PredictX',
-      importance:        Notifications.AndroidImportance.MAX,
-      vibrationPattern:  [0, 250, 250, 250],
-      lightColor:        '#2563EB',
+      name:             'PredictX',
+      importance:       Notifications.AndroidImportance.MAX,
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor:       '#2563EB',
     });
   }
 
   try {
     const projectId = Constants.expoConfig?.extra?.eas?.projectId;
     const { data: token } = await Notifications.getExpoPushTokenAsync({ projectId });
-
-    await api.post('/user/push-token', {
-      token,
-      platform: Platform.OS,
-    });
+    await api.post('/user/push-token', { token, platform: Platform.OS });
   } catch (e) {
     console.warn('[Push] token registration failed:', e);
   }
 }
 
+export async function getPermissionStatus(): Promise<string> {
+  if (!Notifications || !Device.isDevice) return 'undetermined';
+  const { status } = await Notifications.getPermissionsAsync();
+  return status;
+}
+
 export function usePushNotifications() {
-  const router         = useRouter();
-  const responseRef    = useRef<Notifications.Subscription | null>(null);
+  const router      = useRouter();
+  const responseRef = useRef<any>(null);
 
   useEffect(() => {
-    // Register if permission already granted (no prompt — user may have granted before)
+    if (!Notifications || !Device.isDevice) return;
+
     Notifications.getPermissionsAsync().then(({ status }) => {
-      if (status === 'granted') {
-        requestPushPermissionAndRegister().catch(() => {});
-      }
+      if (status === 'granted') requestPushPermissionAndRegister().catch(() => {});
     });
 
-    // Handle notification taps → deep link
     responseRef.current = Notifications.addNotificationResponseReceivedListener(resp => {
       const data = resp.notification.request.content.data as Record<string, string> | undefined;
       if (data?.route) {
@@ -74,8 +85,6 @@ export function usePushNotifications() {
       }
     });
 
-    return () => {
-      responseRef.current?.remove();
-    };
+    return () => { responseRef.current?.remove(); };
   }, []);
 }

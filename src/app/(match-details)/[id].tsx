@@ -111,16 +111,20 @@ function TeamLogo({ logo, shortName, size }: { logo: string; shortName: string; 
   const safeShort = shortName || 'TBD';
   const url       = getTeamLogo(logo ?? '', safeShort);
   const color     = getTeamColor(safeShort);
+  const circle    = {
+    width: size, height: size, borderRadius: size / 2,
+    alignItems: 'center' as const, justifyContent: 'center' as const,
+    overflow: 'hidden' as const,
+  };
   if (url) {
     return (
-      <Image source={{ uri: url }} style={{ width: size, height: size }} resizeMode="contain" />
+      <View style={{ ...circle, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E5E7EB' }}>
+        <Image source={{ uri: url }} style={{ width: size * 0.74, height: size * 0.74 }} resizeMode="contain" />
+      </View>
     );
   }
   return (
-    <View style={{
-      width: size, height: size, borderRadius: size / 2,
-      backgroundColor: color + '25', alignItems: 'center', justifyContent: 'center',
-    }}>
+    <View style={{ ...circle, backgroundColor: color + '25' }}>
       <Text style={{ color, fontSize: size * 0.3, fontWeight: '700' }}>{shortName || '?'}</Text>
     </View>
   );

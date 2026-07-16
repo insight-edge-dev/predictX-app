@@ -7,8 +7,10 @@ import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { useIsFootball } from '@/contexts/LeagueContext';
 import { useQueryClient } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
+import * as SecureStore from 'expo-secure-store';
+import Constants from 'expo-constants';
 import api from '@/services/api';
-import { usePushNotifications } from '@/hooks/usePushNotifications';
+import { usePushNotifications, requestPushPermissionAndRegister, getPermissionStatus } from '@/hooks/usePushNotifications';
 
 const BAR_H = 60;
 
@@ -95,6 +97,24 @@ label: {
   },
 });
 
+const NOTIF_PROMPT_KEY = 'notif_prompt_shown_v1';
+
+function useFirstLaunchNotifPermission() {
+  useEffect(() => {
+    if (Constants.appOwnership === 'expo') return; // Expo Go doesn't support push
+
+    SecureStore.getItemAsync(NOTIF_PROMPT_KEY).then(val => {
+      if (val) return; // already asked before
+      SecureStore.setItemAsync(NOTIF_PROMPT_KEY, '1').catch(() => {});
+      getPermissionStatus().then(status => {
+        if (status === 'granted') return; // already have permission
+        // Small delay so the home screen renders first, then show native system dialog
+        setTimeout(() => requestPushPermissionAndRegister(), 800);
+      });
+    }).catch(() => {});
+  }, []);
+}
+
 function usePrefetch() {
   const queryClient = useQueryClient();
   useEffect(() => {
@@ -109,6 +129,7 @@ function usePrefetch() {
 export default function TabLayout() {
   usePrefetch();
   usePushNotifications();
+  useFirstLaunchNotifPermission();
   return (
     <Tabs
       screenOptions={{ headerShown: false }}

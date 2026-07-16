@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "104112869347",
+    "project_id": "predictxsports-d133b",
+    "storage_bucket": "predictxsports-d133b.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:104112869347:android:99b7791341a6492450dad6",
+        "android_client_info": {
+          "package_name": "com.insideedge.cricvora"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCLDxgc2Z_QfIfapphfP_oQUUlX5ZAEEUg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

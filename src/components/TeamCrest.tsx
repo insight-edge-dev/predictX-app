@@ -26,26 +26,38 @@ export function TeamCrest({ logo, flag, size = 20 }: Props) {
 
   useEffect(() => { setFailed(false); }, [logo]);
 
+  const containerStyle = {
+    width: size, height: size, borderRadius: size / 2,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1, borderColor: '#E5E7EB',
+    alignItems: 'center' as const, justifyContent: 'center' as const,
+    overflow: 'hidden' as const,
+  };
+  const innerSize = size * 0.72;
+
   if (logo && !failed) {
-    // football-data.org serves many crests as SVG, which <Image> can't render.
     if (logo.toLowerCase().endsWith('.svg')) {
       return (
-        <SvgUri
-          uri={logo}
-          width={size}
-          height={size}
-          onError={() => setFailed(true)}
-          fallback={<FlagFallback flag={flag} size={size} />}
-        />
+        <View style={containerStyle}>
+          <SvgUri
+            uri={logo}
+            width={innerSize}
+            height={innerSize}
+            onError={() => setFailed(true)}
+            fallback={<Text style={{ fontSize: size * 0.45 }}>{flag}</Text>}
+          />
+        </View>
       );
     }
     return (
-      <Image
-        source={{ uri: logo }}
-        style={{ width: size, height: size }}
-        contentFit="contain"
-        onError={() => setFailed(true)}
-      />
+      <View style={containerStyle}>
+        <Image
+          source={{ uri: logo }}
+          style={{ width: innerSize, height: innerSize }}
+          contentFit="contain"
+          onError={() => setFailed(true)}
+        />
+      </View>
     );
   }
 

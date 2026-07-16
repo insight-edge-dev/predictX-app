@@ -61,12 +61,17 @@ function StatCol({
 }) {
   return (
     <>
-      <View style={{ flex: 1, alignItems: "center", gap: 8, paddingVertical: 4 }}>
+      <View style={{ flex: 1, alignItems: "center", gap: 6, paddingVertical: 4, paddingHorizontal: 4 }}>
         <IconBubble icon={icon} iconColor={iconColor} bg={bg} />
-        <Text style={{ color: "#111827", fontSize: 20, fontWeight: "800", letterSpacing: -0.3 }}>
+        <Text
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.6}
+          style={{ color: "#111827", fontSize: 18, fontWeight: "800", letterSpacing: -0.3, width: "100%", textAlign: "center" }}
+        >
           {value}
         </Text>
-        <Text style={{ color: "#9CA3AF", fontSize: 10, fontWeight: "500", textAlign: "center" }}>
+        <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={{ color: "#9CA3AF", fontSize: 11, fontWeight: "500", textAlign: "center", width: "100%" }}>
           {label}
         </Text>
       </View>
@@ -514,7 +519,7 @@ export default function ProfileScreen() {
           <View style={{ paddingHorizontal: 20, gap: 28, marginTop: 24 }}>
 
             {/* ── Stats card ── */}
-            <View style={{ ...card, paddingVertical: 24, paddingHorizontal: 8 }}>
+            <View style={{ ...card, paddingVertical: 20, paddingHorizontal: 4 }}>
               <View style={{ flexDirection: "row", alignItems: "center" }}>
                 <StatCol
                   icon="heart"           iconColor="#3B82F6" bg="#EFF6FF"
@@ -530,7 +535,7 @@ export default function ProfileScreen() {
                 />
                 <StatCol
                   icon="flame"           iconColor="#EA580C" bg="#FFF7ED"
-                  value={hasPredStats ? predStats.total : "—"}           label="Total Predictions"
+                  value={hasPredStats ? predStats.total : "—"}           label="Total Picks"
                 />
               </View>
             </View>
@@ -555,7 +560,7 @@ export default function ProfileScreen() {
                   <Ionicons name="chevron-forward" size={12} color={colors.accent} />
                 </Pressable>
               </View>
-              <View style={{ ...card, paddingVertical: 24, paddingHorizontal: 8 }}>
+              <View style={{ ...card, paddingVertical: 20, paddingHorizontal: 4 }}>
                 {hasPredStats ? (
                   <View style={{ flexDirection: "row", alignItems: "center" }}>
                     <StatCol icon="checkmark-circle" iconColor="#16A34A" bg="#F0FDF4" value={predStats.correct}      label="Correct"  divider />
