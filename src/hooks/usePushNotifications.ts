@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import * as Device from 'expo-device';
-import { Platform } from 'react-native';
+import { Platform, AppState } from 'react-native';
 import Constants from 'expo-constants';
 import { useRouter } from 'expo-router';
 import api from '@/services/api';
@@ -28,8 +28,8 @@ if (Notifications) {
   });
 }
 
-export async function requestPushPermissionAndRegister(): Promise<void> {
-  if (!Notifications || !Device.isDevice) return;
+export async function requestPushPermissionAndRegister(): Promise<{ success: boolean; error?: string }> {
+  if (!Notifications || !Device.isDevice) return { success: false, error: 'Not supported' };
 
   const { status: existing } = await Notifications.getPermissionsAsync();
   let status = existing;
@@ -39,7 +39,7 @@ export async function requestPushPermissionAndRegister(): Promise<void> {
     status = asked;
   }
 
-  if (status !== 'granted') return;
+  if (status !== 'granted') return { success: false, error: 'Permission denied' };
 
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync('default', {
@@ -54,8 +54,11 @@ export async function requestPushPermissionAndRegister(): Promise<void> {
     const projectId = Constants.expoConfig?.extra?.eas?.projectId;
     const { data: token } = await Notifications.getExpoPushTokenAsync({ projectId });
     await api.post('/user/push-token', { token, platform: Platform.OS });
-  } catch (e) {
-    console.warn('[Push] token registration failed:', e);
+    return { success: true };
+  } catch (e: any) {
+    const msg = e?.message ?? 'Unknown error';
+    console.warn('[Push] token registration failed:', msg);
+    return { success: false, error: msg };
   }
 }
 
@@ -65,16 +68,43 @@ export async function getPermissionStatus(): Promise<string> {
   return status;
 }
 
-export function usePushNotifications() {
-  const router      = useRouter();
-  const responseRef = useRef<any>(null);
+// Retries registration silently when app comes to foreground.
+// Handles cold-start backends (Render free tier) — first attempt may time out
+// but subsequent foreground events retry until the backend is warm.
+function useTokenRetryOnForeground() {
+  const hasToken = useRef(false);
 
   useEffect(() => {
     if (!Notifications || !Device.isDevice) return;
 
-    Notifications.getPermissionsAsync().then(({ status }) => {
-      if (status === 'granted') requestPushPermissionAndRegister().catch(() => {});
+    const tryRegister = async () => {
+      if (hasToken.current) return;
+      const { status } = await Notifications.getPermissionsAsync();
+      if (status !== 'granted') return;
+      const result = await requestPushPermissionAndRegister();
+      if (result.success) hasToken.current = true;
+    };
+
+    // Try immediately on mount
+    tryRegister();
+
+    // Retry every time app comes to foreground
+    const sub = AppState.addEventListener('change', state => {
+      if (state === 'active') tryRegister();
     });
+
+    return () => sub.remove();
+  }, []);
+}
+
+export function usePushNotifications() {
+  const router      = useRouter();
+  const responseRef = useRef<any>(null);
+
+  useTokenRetryOnForeground();
+
+  useEffect(() => {
+    if (!Notifications || !Device.isDevice) return;
 
     responseRef.current = Notifications.addNotificationResponseReceivedListener(resp => {
       const data = resp.notification.request.content.data as Record<string, string> | undefined;

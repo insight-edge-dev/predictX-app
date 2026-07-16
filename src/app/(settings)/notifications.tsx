@@ -282,7 +282,9 @@ const NOTIF_ROWS: { key: keyof NotifPrefs; label: string; sub: string; icon: str
 
 function PushPrefsSection() {
   const { isAuthenticated } = useAuth();
-  const [permStatus, setPermStatus] = useState<string | null>(null);
+  const [permStatus,   setPermStatus]   = useState<string | null>(null);
+  const [enabling,     setEnabling]     = useState(false);
+  const [enableResult, setEnableResult] = useState<'success' | 'error' | null>(null);
   const queryClient = useQueryClient();
 
   useEffect(() => {
@@ -290,8 +292,15 @@ function PushPrefsSection() {
   }, []);
 
   const handleEnable = async () => {
-    await requestPushPermissionAndRegister();
-    getPermissionStatus().then(status => setPermStatus(status));
+    setEnabling(true);
+    setEnableResult(null);
+    const result = await requestPushPermissionAndRegister();
+    const status = await getPermissionStatus();
+    setPermStatus(status);
+    setEnableResult(result.success ? 'success' : 'error');
+    setEnabling(false);
+    // Clear result badge after 3s
+    setTimeout(() => setEnableResult(null), 3000);
   };
 
   const { data: prefs } = useQuery<NotifPrefs>({
@@ -321,14 +330,15 @@ function PushPrefsSection() {
   return (
     <View style={{ marginHorizontal: spacing.lg, marginBottom: spacing.xl }}>
 
-      {/* Enable banner — only shown when permission not yet granted */}
-      {permStatus !== null && !isGranted && (
+      {/* Enable banner — shown when permission not granted, or granted but showing result */}
+      {permStatus !== null && (!isGranted || enableResult !== null) && (
         <Pressable
           onPress={handleEnable}
+          disabled={enabling}
           style={({ pressed }) => ({
-            opacity: pressed ? 0.88 : 1,
+            opacity: pressed || enabling ? 0.88 : 1,
             flexDirection: 'row', alignItems: 'center', gap: spacing.md,
-            backgroundColor: colors.accent,
+            backgroundColor: enableResult === 'error' ? '#EF4444' : enableResult === 'success' ? '#16A34A' : colors.accent,
             borderRadius: radius.lg,
             padding: spacing.lg,
             marginBottom: spacing.md,
@@ -339,13 +349,32 @@ function PushPrefsSection() {
             backgroundColor: 'rgba(255,255,255,0.18)',
             alignItems: 'center', justifyContent: 'center', flexShrink: 0,
           }}>
-            <Ionicons name="notifications" size={22} color="#fff" />
+            <Ionicons
+              name={enableResult === 'success' ? 'checkmark-circle' : enableResult === 'error' ? 'alert-circle' : 'notifications'}
+              size={22} color="#fff"
+            />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={{ color: '#fff', fontSize: font.sm, fontWeight: '800', marginBottom: 2 }}>Enable Push Notifications</Text>
-            <Text style={{ color: 'rgba(255,255,255,0.75)', fontSize: font.xs, lineHeight: 16 }}>Tap to get match alerts and live updates</Text>
+            <Text style={{ color: '#fff', fontSize: font.sm, fontWeight: '800', marginBottom: 2 }}>
+              {enabling
+                ? 'Registering…'
+                : enableResult === 'success'
+                ? 'Notifications enabled!'
+                : enableResult === 'error'
+                ? 'Failed — tap to retry'
+                : 'Enable Push Notifications'}
+            </Text>
+            <Text style={{ color: 'rgba(255,255,255,0.75)', fontSize: font.xs, lineHeight: 16 }}>
+              {enabling
+                ? 'Connecting to push service…'
+                : enableResult === 'error'
+                ? 'Could not register device. Try again.'
+                : 'Tap to get match alerts and live updates'}
+            </Text>
           </View>
-          <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.7)" />
+          {!enabling && enableResult === null && (
+            <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.7)" />
+          )}
         </Pressable>
       )}
 
