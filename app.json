@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "PredictX",
-    "slug": "predictx",
+    "slug": "ipl-iq",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -29,7 +29,10 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "package": "com.insideedge.cricvora",
-      "versionCode": 1
+      "versionCode": 1,
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png",
@@ -61,6 +64,7 @@
       "eas": {
         "projectId": "a16f9d8d-dba4-4017-bdfd-9a2b4cd832a0"
       }
-    }
+    },
+    "owner": "aviiishk"
   }
 }
