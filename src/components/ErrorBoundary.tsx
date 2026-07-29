@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, Pressable, ScrollView } from 'react-native';
 import { colors, font, spacing, radius } from '@/constants/theme';
+import { recordError } from '@/utils/firebase';
 
 interface Props   { children: React.ReactNode; }
 interface State   { hasError: boolean; error: Error | null; }
@@ -14,6 +15,7 @@ export default class ErrorBoundary extends React.Component<Props, State> {
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
     console.error('[ErrorBoundary] caught:', error.message, info.componentStack);
+    recordError(error, `ErrorBoundary: ${info.componentStack?.slice(0, 200) ?? ''}`);
   }
 
   reset = () => this.setState({ hasError: false, error: null });

@@ -47,6 +47,8 @@ import { colors, spacing, font, radius } from '@/constants/theme';
 import { getTeamColor, getTeamLogo } from '@/theme/colors';
 import { formatMatchDate } from '@/utils/date';
 import api from '@/services/api';
+import { trackMatchOpened } from '@/utils/firebase';
+import { metaTrackMatchOpened } from '@/utils/metaEvents';
 
 // ── Extended backend type ─────────────────────────────────────
 
@@ -1791,6 +1793,13 @@ function CricketMatchDetailScreen() {
   const { data: poll } = usePredictionPoll(id ?? '');
 
   useEffect(() => {
+    if (!match) return;
+    const raw = match as RawFull;
+    void trackMatchOpened(id ?? '', `${raw.team1?.shortName ?? ''} vs ${raw.team2?.shortName ?? ''}`, raw.series ?? 'cricket');
+    metaTrackMatchOpened(id ?? '', raw.series ?? 'cricket');
+  }, [id, match?.id]);  // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
     if (inningsInitialized || !match) return;
     const raw = match as RawFull;
     if (raw.scorecard && raw.scorecard.length > 0) {
@@ -2501,6 +2510,12 @@ function FootballMatchDetailScreen() {
   const { user, profile, isAuthenticated } = useAuth();
   const { query: userPredQuery, submit: submitPred, change: changePred } = useUserPrediction(id ?? '', isAuthenticated);
   const { data: poll } = usePredictionPoll(id ?? '');
+
+  useEffect(() => {
+    if (!match) return;
+    void trackMatchOpened(id ?? '', `${match.homeTeam.name} vs ${match.awayTeam.name}`, 'football');
+    metaTrackMatchOpened(id ?? '', 'football');
+  }, [id, match?.id]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   const BackButton = (
     <View style={{
