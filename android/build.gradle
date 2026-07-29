@@ -20,6 +20,15 @@ allprojects {
     mavenCentral()
     maven { url 'https://www.jitpack.io' }
   }
+  configurations.all {
+    resolutionStrategy {
+      // play-services-ads 25.4.0 is compiled with Kotlin 2.3.0 which is
+      // incompatible with the Kotlin 2.1.x used by Expo SDK 55.
+      // Force the last version compatible with Kotlin 2.1.x.
+      force "com.google.android.gms:play-services-ads:25.3.0"
+      force "com.google.android.gms:play-services-ads-lite:25.3.0"
+    }
+  }
 }
 
 apply plugin: "expo-root-project"
