@@ -2,6 +2,7 @@ import {
   View, Text, Pressable, ScrollView, Image,
   TextInput, ActivityIndicator, Modal, Alert, Platform, StyleSheet,
 } from "react-native";
+import { AppBanner } from "@/components/ads/AppBanner";
 import { useState } from "react";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
@@ -685,6 +686,8 @@ export default function ProfileScreen() {
                 />
               </View>
             </View>
+
+            <AppBanner />
 
             {/* ── Footer ── */}
             <View style={{ alignItems: "center", gap: 20, paddingTop: 8 }}>

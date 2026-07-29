@@ -5,6 +5,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useLeaderboard, useMyPredictionStats } from '@/hooks/useUserPrediction';
+import { AppBanner } from '@/components/ads/AppBanner';
 import { useAuth } from '@/contexts/AuthContext';
 import { colors, font, spacing, radius } from '@/constants/theme';
 
@@ -115,11 +116,19 @@ function RankRow({
 export default function LeaderboardScreen() {
   const [period, setPeriod] = useState<Period>('week');
   const { user, isAuthenticated } = useAuth();
-  const { data: entries = [], isLoading, isError, refetch } = useLeaderboard(LIMIT, period);
+  const { data: weekEntries = [], isLoading: weekLoading, isError: weekError, refetch: weekRefetch } = useLeaderboard(LIMIT, 'week');
+  const { data: allEntries  = [], isLoading: allLoading,  isError: allError,  refetch: allRefetch  } = useLeaderboard(LIMIT, 'all');
   const { data: myStats } = useMyPredictionStats(isAuthenticated);
 
-  const myId  = user?.id;
-  const myIdx = useMemo(() => entries.findIndex(e => e.user_id === myId), [entries, myId]);
+  const activeRaw    = period === 'week' ? weekEntries : allEntries;
+  const usingFallback = period === 'week' && !weekLoading && weekEntries.length < 5;
+  const entries      = usingFallback ? allEntries : activeRaw;
+  const isLoading    = period === 'week' ? weekLoading : allLoading;
+  const isError      = period === 'week' ? weekError   : allError;
+  const refetch      = () => { weekRefetch(); allRefetch(); };
+
+  const myId    = user?.id;
+  const myIdx   = useMemo(() => entries.findIndex(e => e.user_id === myId), [entries, myId]);
   const myEntry = myIdx >= 0 ? entries[myIdx] : null;
 
   const top3 = entries.slice(0, 3);
@@ -156,6 +165,13 @@ export default function LeaderboardScreen() {
           ))}
         </View>
       </View>
+
+      {usingFallback && (
+        <View style={s.fallbackBanner}>
+          <Ionicons name="information-circle-outline" size={14} color={colors.textMuted} />
+          <Text style={s.fallbackText}>No activity this week · Showing All Time</Text>
+        </View>
+      )}
 
       {isLoading ? (
         <View style={s.loader}>
@@ -242,6 +258,8 @@ export default function LeaderboardScreen() {
           <View style={{ height: myEntry ? 80 : 24 }} />
         </ScrollView>
       )}
+
+      <AppBanner />
 
       {/* ── Sticky "your rank" bar ────────────────────────────── */}
       {isAuthenticated && myEntry && (
@@ -668,5 +686,21 @@ const s = StyleSheet.create({
     fontWeight: '900',
     color:      colors.accent,
     letterSpacing: -0.5,
+  },
+
+  fallbackBanner: {
+    flexDirection:   'row',
+    alignItems:      'center',
+    gap:             spacing.xs,
+    paddingHorizontal: spacing.lg,
+    paddingVertical:   spacing.xs + 2,
+    backgroundColor:   colors.cardElevated,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  fallbackText: {
+    fontSize:  font.xs,
+    color:     colors.textMuted,
+    fontWeight: '500',
   },
 });

@@ -4,6 +4,8 @@ import { setAccessToken, getAccessToken, onAuthExpired } from '@/services/api';
 import type { AppUser } from '@/services/authService';
 import type { UserProfile } from '@/types/prediction';
 import api from '@/services/api';
+import { setUserForCrashlytics, clearUserForCrashlytics, trackLogin, trackSignUp } from '@/utils/firebase';
+import { metaTrackLogin, metaTrackSignUp } from '@/utils/metaEvents';
 
 // ── Types ─────────────────────────────────────────────────────
 
@@ -33,8 +35,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     user: null, profile: null, isLoading: true, isAuthenticated: false,
   });
 
-  const mountedRef     = useRef(true);
-  const accessTokenRef = useRef<string | null>(null);
+  const mountedRef = useRef(true);
 
   const safeSet = useCallback(
     (updater: AuthState | ((p: AuthState) => AuthState)) => {
@@ -56,14 +57,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const setAuthenticated = useCallback(async (user: AppUser, tokens: authService.AuthTokens) => {
     await authService.persistTokens(tokens);
-    accessTokenRef.current = tokens.accessToken;
     const profile = await loadProfile(user.id);
     safeSet({ user, profile, isLoading: false, isAuthenticated: true });
+    setUserForCrashlytics(user.id, user.phone);
   }, [loadProfile, safeSet]);
 
   const clearState = useCallback(async () => {
     await authService.clearTokens();
-    accessTokenRef.current = null;
     safeSet({ user: null, profile: null, isLoading: false, isAuthenticated: false });
   }, [safeSet]);
 
@@ -78,7 +78,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (result.success && result.user && result.tokens) {
         await authService.persistTokens(result.tokens);
-        accessTokenRef.current = result.tokens.accessToken;
         const profile = await loadProfile(result.user.id);
         safeSet({ user: result.user, profile, isLoading: false, isAuthenticated: true });
       } else {
@@ -112,6 +111,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return { success: false, isNewUser: false, error: result.error ?? 'Verification failed' };
     }
     await setAuthenticated(result.user, result.tokens);
+    if (result.user.isNewUser) {
+      void trackSignUp();
+      metaTrackSignUp();
+    } else {
+      void trackLogin();
+      metaTrackLogin();
+    }
     return { success: true, isNewUser: !!result.user.isNewUser, error: null };
   }, [setAuthenticated]);
 
@@ -144,8 +150,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(async () => {
     const accessToken  = getAccessToken() ?? '';
     const refreshToken = (await authService.getStoredRefreshToken()) ?? '';
-    // Revoke on backend (fire and forget — don't block UI)
     void authService.logout(accessToken, refreshToken);
+    clearUserForCrashlytics();
     await clearState();
   }, [clearState]);
 

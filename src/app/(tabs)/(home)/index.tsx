@@ -14,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLiveScores } from '@/hooks/useLiveScores';
 import { useMatchCategories, useIPLTable, useLeagueFixtures } from '@/hooks/useMatches';
 import { useHomeRankings, useHomeNews, useSeasonStats, type RankingPlayer, type RankingTeam, type NewsItem, type ToplistPlayer } from '@/hooks/useHome';
+import { FeedNativeAd } from '@/components/ads/FeedNativeAd';
 import { getTeamColor, getTeamLogo } from '@/theme/colors';
 import { colors, spacing, font, radius } from '@/constants/theme';
 import { dedupeMatches } from '@/utils/matchAdapter';
@@ -1829,7 +1830,11 @@ function CricketHomeScreen() {
               ) : (
                 <>
                   <NewsCard item={news[0]} onPress={() => router.push(`/(news-detail)/${news[0].id}`)} featured />
-                  {news.slice(1, 5).map((item, idx) => (
+                  {news.slice(1, 3).map((item, idx) => (
+                    <NewsCard key={item.id ?? idx} item={item} onPress={() => router.push(`/(news-detail)/${item.id}`)} />
+                  ))}
+                  <FeedNativeAd />
+                  {news.slice(3, 5).map((item, idx) => (
                     <NewsCard key={item.id ?? idx} item={item} onPress={() => router.push(`/(news-detail)/${item.id}`)} />
                   ))}
                 </>

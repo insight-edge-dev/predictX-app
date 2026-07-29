@@ -479,7 +479,7 @@ export default function DiscoveryScreen({ onOpenLeagueSheet, onOpenDrawer }: Pro
               {sortedLeagueCards
                 .slice(0, showAllLeagueCards ? sortedLeagueCards.length : LEAGUE_CARD_LIMIT)
                 .map((card, i) => (
-                  <LeagueTrackRecordCard key={card.slug} card={card} index={i} defaultExpanded={i === 0} onPressMatch={goToRecentPrediction} />
+                  <LeagueTrackRecordCard key={card.slug} card={card} index={i} defaultExpanded={true} onPressMatch={goToRecentPrediction} />
                 ))}
               {sortedLeagueCards.length > LEAGUE_CARD_LIMIT && (
                 <Pressable

@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react'; // useCallback used in MatchPickCard
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   View, Text, Pressable, ActivityIndicator,
 } from 'react-native';
@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/contexts/AuthContext';
+import { showInterstitial } from '@/utils/adInterstitial';
 import { useUserPrediction, type PredictedWinner } from '@/hooks/useUserPrediction';
 import { useAllMatches, type AllMatchItem } from '@/hooks/useAllMatches';
 import { TeamBadge } from '@/components/home/HomeShared';
@@ -97,6 +98,13 @@ function MatchPickCard({ data }: { data: NormalizedMatch }) {
   const t1Picked = hasPicked && (pw === 'teama' || pw === data.t1Name.toLowerCase().trim());
   const t2Picked = hasPicked && (pw === 'teamb' || pw === data.t2Name.toLowerCase().trim());
   const drPicked = hasPicked && !t1Picked && !t2Picked;
+
+  // Show interstitial 1.5s after a new prediction is submitted (gives UI time to update first).
+  useEffect(() => {
+    if (!submit.isSuccess) return;
+    const t = setTimeout(showInterstitial, 1500);
+    return () => clearTimeout(t);
+  }, [submit.isSuccess]);
 
   const handlePick = useCallback((side: PredictedWinner) => {
     if (!isAuthenticated) { data.onPress(); return; }

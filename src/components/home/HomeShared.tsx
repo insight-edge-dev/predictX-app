@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, Pressable, Image,
 } from 'react-native';
@@ -261,10 +261,19 @@ export function LeagueTrackRecordCard({ card, index, defaultExpanded = true, onP
 
   const entryOpacity    = useSharedValue(0);
   const entryTranslateY = useSharedValue(16);
-  const accordionHeight = useSharedValue(defaultExpanded ? 2000 : 0);
+  const measuredH       = useRef(0);
+  const accordionHeight = useSharedValue(defaultExpanded ? 600 : 0);
 
   const entryStyle     = useAnimatedStyle(() => ({ opacity: entryOpacity.value, transform: [{ translateY: entryTranslateY.value }] }));
   const accordionStyle = useAnimatedStyle(() => ({ maxHeight: accordionHeight.value, overflow: 'hidden' as any }));
+
+  const onContentLayout = useCallback((e: any) => {
+    const h = e.nativeEvent.layout.height;
+    if (h > 0) {
+      measuredH.current = h;
+      if (expanded) accordionHeight.value = h;
+    }
+  }, [expanded]);
 
   useEffect(() => {
     const delay = Math.min(index * STAGGER_STEP_MS, STAGGER_MAX_MS);
@@ -317,11 +326,11 @@ export function LeagueTrackRecordCard({ card, index, defaultExpanded = true, onP
               <Text style={{ color: colors.textMuted, fontSize: 8, fontWeight: '700' }}>Accuracy</Text>
             </View>
           )}
-          {card.recentMatches.length > 1 && (
+          {card.recentMatches.length > 0 && (
             <Pressable onPress={() => setExpanded(e => {
               const next = !e;
               if (!next) setShowAll(false);
-              accordionHeight.value = withSpring(next ? 2000 : 0, springs.smooth);
+              accordionHeight.value = withSpring(next ? (measuredH.current || 600) : 0, springs.smooth);
               return next;
             })} hitSlop={8} style={{
               width: 28, height: 28, borderRadius: 14, backgroundColor: colors.bg,
@@ -334,6 +343,7 @@ export function LeagueTrackRecordCard({ card, index, defaultExpanded = true, onP
       </View>
 
       <Animated.View style={[{ marginTop: spacing.sm }, accordionStyle]}>
+        <View onLayout={onContentLayout}>
         {card.recentMatches.length === 0 ? (
           <Text style={{ color: colors.textMuted, fontSize: font.xs, paddingVertical: spacing.sm }}>
             No recent completed matches yet
@@ -405,6 +415,7 @@ export function LeagueTrackRecordCard({ card, index, defaultExpanded = true, onP
             </Text>
           </Pressable>
         )}
+        </View>
       </Animated.View>
     </Animated.View>
   );

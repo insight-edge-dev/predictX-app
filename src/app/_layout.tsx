@@ -13,8 +13,29 @@ import { LeagueProvider } from "@/contexts/LeagueContext";
 import { NotificationBadgeProvider } from "@/contexts/NotificationBadgeContext";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import OfflineBanner from "@/components/OfflineBanner";
+import MaintenanceBanner from "@/components/MaintenanceBanner";
 import { UpdatePrompt } from "@/components/UpdatePrompt";
 import { colors } from "@/constants/theme";
+import { recordError } from "@/utils/firebase";
+import MobileAds from "react-native-google-mobile-ads";
+import { preloadInterstitial } from "@/utils/adInterstitial";
+// Catch unhandled JS errors and send to Crashlytics (global.ErrorUtils, not a named RN export)
+try {
+  const EU = (global as any).ErrorUtils;
+  if (EU) {
+    const previousHandler = EU.getGlobalHandler();
+    EU.setGlobalHandler((error: Error, isFatal?: boolean) => {
+      recordError(error, isFatal ? 'fatal' : 'unhandled');
+      previousHandler?.(error, isFatal);
+    });
+  }
+} catch {}
+
+// Initialize AdMob once at app start, then preload the first interstitial.
+MobileAds()
+  .initialize()
+  .then(() => preloadInterstitial())
+  .catch(() => {});
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -71,6 +92,12 @@ export default function RootLayout() {
           persister,
           maxAge: 24 * 60 * 60 * 1000,
           buster: CACHE_BUSTER,
+          dehydrateOptions: {
+            shouldDehydrateQuery: (q) => {
+              const key = String(q.queryKey[0] ?? '');
+              return !['user', 'auth', 'profile', 'token'].some(k => key.includes(k));
+            },
+          },
         }}
       >
         <LeagueProvider>
@@ -85,6 +112,7 @@ export default function RootLayout() {
               }}
             />
             <OfflineBanner />
+            <MaintenanceBanner />
             <UpdatePrompt />
           </View>
         </AuthProvider>
