@@ -17,7 +17,6 @@ import MaintenanceBanner from "@/components/MaintenanceBanner";
 import { UpdatePrompt } from "@/components/UpdatePrompt";
 import { colors } from "@/constants/theme";
 import { recordError } from "@/utils/firebase";
-import MobileAds from "react-native-google-mobile-ads";
 import { preloadInterstitial } from "@/utils/adInterstitial";
 // Catch unhandled JS errors and send to Crashlytics (global.ErrorUtils, not a named RN export)
 try {
@@ -31,11 +30,11 @@ try {
   }
 } catch {}
 
-// Initialize AdMob once at app start, then preload the first interstitial.
-MobileAds()
-  .initialize()
-  .then(() => preloadInterstitial())
-  .catch(() => {});
+// Initialize AdMob once at app start — silently skipped in Expo Go (native module unavailable).
+try {
+  const MobileAds = require('react-native-google-mobile-ads').default;
+  MobileAds().initialize().then(() => preloadInterstitial()).catch(() => {});
+} catch {}
 
 const queryClient = new QueryClient({
   defaultOptions: {

@@ -1,8 +1,16 @@
 import { View } from 'react-native';
-import { BannerAd, BannerAdSize } from 'react-native-google-mobile-ads';
 import { AD_UNITS } from '@/utils/adUnits';
 
+let BannerAd:     any = null;
+let BannerAdSize: any = null;
+try {
+  const mod  = require('react-native-google-mobile-ads');
+  BannerAd     = mod.BannerAd;
+  BannerAdSize = mod.BannerAdSize;
+} catch {}
+
 export function AppBanner() {
+  if (!BannerAd) return null;
   return (
     <View style={{ alignItems: 'center' }}>
       <BannerAd
